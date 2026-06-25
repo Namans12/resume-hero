@@ -1,0 +1,46 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Resume (this project)",
+      "description": "Vite 8 + React 19 + TypeScript 6 — hero section dev server",
+      "cwd": "/Users/naman/resume",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "Portfolio Resume",
+      "description": "Vite 6 + React 18 + TypeScript 5.2 — full portfolio site",
+      "cwd": "/Users/naman/Mine/Portfolio_resume",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "Shrimal & Associates",
+      "description": "Next.js 15 — legal firm website",
+      "cwd": "/Users/naman/Mine/rhythm",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "Tasker API",
+      "description": "Express 5 API + static client (audio task extractor)",
+      "cwd": "/Users/naman/Downloads/tasker",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000
+    },
+    {
+      "name": "Scraper SDK Server",
+      "description": "Fastify API with tsx watch (workspace: @scraper/server)",
+      "cwd": "/Users/naman/Mine/Scraper SDK",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:server"],
+      "port": 3000
+    }
+  ]
+}
