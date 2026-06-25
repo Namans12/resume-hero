@@ -9,7 +9,16 @@ interface HangingLampProps {
 
 const STIFFNESS = 0.18;
 const DAMPING   = 0.72;
-const PULL_DIST = 18; // px the handle travels down when pulled
+const PULL_DIST = 12; // px the handle travels down when pulled
+
+// Horizontal sway — softer spring so the thread swings left/right and settles
+const SWAY_STIFFNESS = 0.022;
+const SWAY_DAMPING   = 0.94;
+const SWAY_IMPULSE   = 3.2; // velocity kick on each toggle
+
+// String geometry (used to make beads sway proportionally along the cord)
+const STRING_TOP = 145;
+const STRING_BOT = 240;
 
 const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisible = true, isMenuOpen = false }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -17,7 +26,9 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
 
   const pullStringRef = useRef<SVGLineElement>(null);
   const pullHandleRef = useRef<HTMLDivElement>(null);
+  const beadRefs      = useRef<(SVGCircleElement | null)[]>([]);
   const animationRef  = useRef<number>();
+  const swayDirRef    = useRef(1); // alternate swing direction each toggle
 
   // Keep a ref in sync so the rAF loop can read isPulled without restarting
   const isPulledRef = useRef(false);
@@ -26,17 +37,36 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
   // Single persistent spring loop — runs once on mount, never restarts
   const springPos = useRef(0);
   const springVel = useRef(0);
+  const swayPos   = useRef(0);
+  const swayVel   = useRef(0);
   useEffect(() => {
     const tick = () => {
+      // Vertical pull spring
       const target = isPulledRef.current ? PULL_DIST : 0;
       const force = (target - springPos.current) * STIFFNESS;
       springVel.current = springVel.current * DAMPING + force;
       springPos.current += springVel.current;
       const pos = springPos.current;
 
-      pullStringRef.current?.setAttribute('y2', String(240 + pos));
+      // Horizontal sway spring (settles back to centre)
+      const swayForce = (0 - swayPos.current) * SWAY_STIFFNESS;
+      swayVel.current = swayVel.current * SWAY_DAMPING + swayForce;
+      swayPos.current += swayVel.current;
+      const sway = swayPos.current;
+
+      pullStringRef.current?.setAttribute('y2', String(STRING_BOT + pos));
+      pullStringRef.current?.setAttribute('x2', String(175 + sway));
+
+      // Beads sway more the further down the cord they sit
+      beadRefs.current.forEach((bead, i) => {
+        if (!bead) return;
+        const cy = 155 + i * 20;
+        const frac = (cy - STRING_TOP) / (STRING_BOT - STRING_TOP);
+        bead.setAttribute('cx', String(175 + sway * frac));
+      });
+
       if (pullHandleRef.current) {
-        pullHandleRef.current.style.transform = `translateY(${pos}px)`;
+        pullHandleRef.current.style.transform = `translate(${sway}px, ${pos}px)`;
       }
 
       animationRef.current = requestAnimationFrame(tick);
@@ -45,15 +75,18 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
     return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
   }, []); // intentionally empty — persistent loop uses ref
 
-  // Release the pull after 900 ms so spring bounces back
+  // Release the pull after 400 ms so spring bounces back
   useEffect(() => {
     if (!isPulled) return;
-    const t = setTimeout(() => setIsPulled(false), 900);
+    const t = setTimeout(() => setIsPulled(false), 400);
     return () => clearTimeout(t);
   }, [isPulled]);
 
   const handleClick = () => {
     setIsPulled(true);
+    // Kick the thread into a gentle left/right swing, alternating each toggle
+    swayVel.current += SWAY_IMPULSE * swayDirRef.current;
+    swayDirRef.current *= -1;
     onThemeChange();
   };
 
@@ -184,8 +217,8 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
             />
 
             {/* String beads */}
-            {[155, 175, 195, 215, 235].map(cy => (
-              <circle key={cy} cx="175" cy={cy} r="2.5"
+            {[155, 175, 195, 215, 235].map((cy, i) => (
+              <circle key={cy} ref={el => { beadRefs.current[i] = el; }} cx="175" cy={cy} r="2.5"
                 fill={isDark ? '#6b7280' : '#9ca3af'}
                 className="pointer-events-none"
               />
