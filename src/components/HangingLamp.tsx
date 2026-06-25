@@ -27,7 +27,7 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
   const pullStringRef = useRef<SVGLineElement>(null);
   const pullHandleRef = useRef<HTMLDivElement>(null);
   const beadRefs      = useRef<(SVGCircleElement | null)[]>([]);
-  const animationRef  = useRef<number>();
+  const animationRef  = useRef<number | undefined>(undefined);
   const swayDirRef    = useRef(1); // alternate swing direction each toggle
 
   // Keep a ref in sync so the rAF loop can read isPulled without restarting

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import HangingLamp from './HangingLamp';
+import ExploreButton from './ExploreButton';
 import heroDay from '../assets/hero-desk-day.png';
 import heroNight from '../assets/hero-desk-night.png';
 import avatarVideo from '../assets/avatar-typing.mp4';
@@ -156,6 +157,24 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
           {/* Stop square */}
           <span className="w-[26px] h-[26px] rounded-sm" style={{ background: isDark ? '#f3f4f6' : '#1f2937', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))' }} />
         </button>
+      )}
+
+      {/* Explore button — at bottom of hero section to scroll into portfolio */}
+      {fade > 0.05 && (
+        <div
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
+          style={{ opacity: fade }}
+        >
+          <ExploreButton
+            isDark={isDark}
+            onClick={() => {
+              window.scrollTo({
+                top: window.innerHeight,
+                behavior: 'smooth',
+              });
+            }}
+          />
+        </div>
       )}
 
       {/* HangingLamp — fixed position, theme toggle; fades out past the hero */}
