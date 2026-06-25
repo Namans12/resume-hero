@@ -55,11 +55,13 @@ const ExploreButton: React.FC<ExploreButtonProps> = ({ isDark, onClick }) => {
                 ))}
               </span>
 
-              {/* Arrow — 3 spans like the burger morph */}
+              {/* Arrow — burger lines morph into a down arrow */}
               <span className={`btn-arrow ${hovered ? 'show' : ''}`} aria-hidden="true">
-                <span className="arr arr-shaft" />
-                <span className="arr arr-left"  />
-                <span className="arr arr-right" />
+                <span className="burger">
+                  <span />
+                  <span />
+                  <span />
+                </span>
               </span>
             </span>
           </button>
@@ -70,7 +72,12 @@ const ExploreButton: React.FC<ExploreButtonProps> = ({ isDark, onClick }) => {
   );
 };
 
-const StyledWrapper = styled.div<{ $isDark: boolean }>`
+const StyledWrapper = styled.div.attrs<{ $isDark: boolean }>(p => ({
+  style: {
+    '--btn-text-color': p.$isDark ? 'rgba(220,220,240,1)' : 'rgba(50,50,50,1)',
+    '--btn-arrow-color': p.$isDark ? 'rgba(220,220,240,1)' : 'rgba(50,50,50,1)',
+  } as React.CSSProperties,
+}))<{ $isDark: boolean }>`
   font-size: 1.6rem;
   --anim--hover-time: 400ms;
   --anim--hover-ease: cubic-bezier(0.25, 1, 0.5, 1);
@@ -166,7 +173,7 @@ const StyledWrapper = styled.div<{ $isDark: boolean }>`
     letter-spacing: -0.05em;
     font-weight: 500;
     font-size: 1em;
-    color: ${p => p.$isDark ? 'rgba(220,220,240,1)' : 'rgba(50,50,50,1)'};
+    color: var(--btn-text-color);
     -webkit-font-smoothing: antialiased;
     text-shadow: 0em 0.25em 0.05em rgba(0,0,0,0.1);
     transition: all var(--anim--hover-time) var(--anim--hover-ease);
@@ -312,59 +319,56 @@ const StyledWrapper = styled.div<{ $isDark: boolean }>`
     z-index: 2;
   }
 
-  .arr {
+  /* Burger group — rotated 90deg so the right-arrow morph points down */
+  .burger {
+    --bsize: 1.15em;
+    --bclr: var(--btn-arrow-color);
+    position: relative;
+    width: var(--bsize);
+    height: calc(0.7 * var(--bsize));
+    transform: rotate(90deg);
+  }
+
+  .burger span {
     display: block;
     position: absolute;
-    background-color: ${p => p.$isDark ? 'rgba(200, 215, 255, 0.95)' : 'rgba(45, 45, 45, 0.9)'};
-    border-radius: 0.15em;
-    transition: 0.18s ease-in-out;
-  }
-
-  /* All three lines share one tip at (50%, bottom: 30%) */
-  .arr-shaft {
-    width: 0.1em;
-    height: 0;
-    bottom: 25%;
-    left: 50%;
-    transform: translateX(-50%);
+    width: 100%;
+    border-radius: 0.25em;
+    border: 0.08em solid var(--bclr);
+    background-color: var(--bclr);
     opacity: 0;
-    transform-origin: bottom center;
+    transition: 0.30s ease-in-out;
   }
 
-  .arr-left {
-    width: 0.1em;
-    height: 0.5em;
-    bottom: 25%;
-    left: 50%;
-    transform: translateX(-50%) rotate(0deg) scaleY(0);
-    transform-origin: bottom center;
-    opacity: 0;
+  .burger span:nth-of-type(1) {
+    top: 0;
+    right: 0;
+    transform-origin: right center;
+  }
+  .burger span:nth-of-type(2) {
+    top: 50%;
+    transform: translateY(-50%);
+  }
+  .burger span:nth-of-type(3) {
+    top: 100%;
+    right: 0;
+    transform-origin: right center;
+    transform: translateY(-100%);
   }
 
-  .arr-right {
-    width: 0.1em;
-    height: 0.5em;
-    bottom: 25%;
-    left: 50%;
-    transform: translateX(-50%) rotate(0deg) scaleY(0);
-    transform-origin: bottom center;
-    opacity: 0;
-  }
-
-  .btn-arrow.show .arr-shaft {
-    height: 0.95em;
+  /* Shown (hovered) — collapse the outer lines into an arrowhead */
+  .btn-arrow.show .burger span {
     opacity: 1;
-    transition-delay: 0.14s;
   }
-  .btn-arrow.show .arr-left {
-    opacity: 1;
-    transform: translateX(-50%) rotate(-45deg) scaleY(1);
-    transition-delay: 0.25s;
+  .btn-arrow.show .burger span:nth-of-type(1) {
+    transform: translateY(-30%) rotate(40deg);
+    width: 50%;
+    top: 50%;
   }
-  .btn-arrow.show .arr-right {
-    opacity: 1;
-    transform: translateX(-50%) rotate(45deg) scaleY(1);
-    transition-delay: 0.25s;
+  .btn-arrow.show .burger span:nth-of-type(3) {
+    transform: translateY(-70%) rotate(-40deg);
+    width: 50%;
+    top: 50%;
   }
 `;
 
