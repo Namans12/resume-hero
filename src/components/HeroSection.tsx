@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import HangingLamp from './HangingLamp';
 import ExploreButton from './ExploreButton';
+import HeroPlants from './HeroPlants';
 import heroDay from '../assets/hero-desk-day.png';
 import heroNight from '../assets/hero-desk-night.png';
 import avatarVideo from '../assets/avatar-typing.mp4';
@@ -58,6 +59,9 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
       className="relative w-full min-h-screen overflow-hidden"
       style={{ zIndex: 0 }}
     >
+      {/* Decorative plants — behind the hero illustration */}
+      <HeroPlants isDark={isDark} />
+
       {/* Full-page illustration — object-contain, no cropping */}
       <img
         src={heroDay}
