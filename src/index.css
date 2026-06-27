@@ -56,7 +56,7 @@ html { scroll-behavior: smooth; }
 }
 .cine-nav__label:hover { color: var(--cine-hover); }
 
-/* Active item — text becomes a window onto the floating circle SVG */
+/* Active item - text becomes a window onto the floating circle SVG */
 .cine-nav__label.is-active {
   color: transparent;
   background-image: url('/circle-bg.svg');

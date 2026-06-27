@@ -71,7 +71,7 @@ const ScrollToExplore: React.FC<ScrollToExploreProps> = ({
           focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 rounded-xl"
       >
         <div className="relative">
-          {/* Base — flowing matte-metallic fill, always visible */}
+          {/* Base - flowing matte-metallic fill, always visible */}
           <span
             className={textClasses}
             style={{
@@ -89,7 +89,7 @@ const ScrollToExplore: React.FC<ScrollToExploreProps> = ({
             {label}
           </span>
 
-          {/* Gleam — brighter shine that follows the cursor */}
+          {/* Gleam - brighter shine that follows the cursor */}
           <span
             ref={gleamRef}
             aria-hidden="true"

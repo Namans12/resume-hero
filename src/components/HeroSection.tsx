@@ -31,11 +31,11 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
 
   // Cross-fade without revealing the dotted background: the incoming image sits
   // underneath at full opacity (snaps in, no transition) while the outgoing one
-  // fades out on top — so the character area is always fully covered.
+  // fades out on top - so the character area is always fully covered.
   const dayActive = !isDark;
   const nightActive = isDark;
 
-  // "Watch me" — play a clip of the avatar over the static desk illustration.
+  // "Watch me" - play a clip of the avatar over the static desk illustration.
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,7 +59,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
       className="relative w-full min-h-screen overflow-hidden"
       style={{ zIndex: 0 }}
     >
-      {/* Decorative plants — behind the hero illustration; hidden while the
+      {/* Decorative plants - behind the hero illustration; hidden while the
           video plays so focus stays on the clip */}
       <div
         aria-hidden={playing}
@@ -72,7 +72,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         <HeroPlants isDark={isDark} />
       </div>
 
-      {/* Full-page illustration — object-contain, no cropping */}
+      {/* Full-page illustration - object-contain, no cropping */}
       <img
         src={heroDay}
         alt=""
@@ -97,7 +97,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         }}
       />
 
-      {/* Avatar video — plays over both light/dark desk illustrations */}
+      {/* Avatar video - plays over both light/dark desk illustrations */}
       <video
         ref={videoRef}
         src={avatarVideo}
@@ -114,7 +114,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         }}
       />
 
-      {/* Play button ("Watch me") — shown when the clip isn't playing */}
+      {/* Play button ("Watch me") - shown when the clip isn't playing */}
       {fade > 0.05 && !playing && (
         <button
           type="button"
@@ -157,7 +157,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         </button>
       )}
 
-      {/* Square button — return to the current layout while the clip plays */}
+      {/* Square button - return to the current layout while the clip plays */}
       {playing && (
         <button
           type="button"
@@ -173,7 +173,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         </button>
       )}
 
-      {/* Explore button — at bottom of hero section to scroll into portfolio */}
+      {/* Explore button - at bottom of hero section to scroll into portfolio */}
       {fade > 0.05 && (
         <div
           className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
@@ -191,7 +191,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         </div>
       )}
 
-      {/* HangingLamp — fixed position, theme toggle; fades out past the hero */}
+      {/* HangingLamp - fixed position, theme toggle; fades out past the hero */}
       <HangingLamp isDark={isDark} onThemeChange={onThemeChange} isVisible={lampVisible} />
     </section>
   );

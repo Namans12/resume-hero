@@ -20,7 +20,7 @@ const SETTINGS = {
 // Interactive cursor-connection tuning.
 // Only the dots in the cursor's immediate grid cell connect: one line when the
 // cursor sits on a dot, up to 4 when it's in the middle of four dots.
-const CONNECT_RADIUS = SETTINGS.spacing * 0.95; // px — just under one cell
+const CONNECT_RADIUS = SETTINGS.spacing * 0.95; // px - just under one cell
 const MAX_LINKS = 4;
 const LINE_STRENGTH = 1; // max line opacity at the cursor
 const EASE = 0.18;          // cursor-follow easing (lower = smoother/laggier)
@@ -113,7 +113,7 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
       s.x += (m.x - s.x) * EASE;
       s.y += (m.y - s.y) * EASE;
 
-      // Cursor connections — link only to the nearest few dots (the cursor's
+      // Cursor connections - link only to the nearest few dots (the cursor's
       // grid cell): 1 line when on a dot, up to MAX_LINKS in the middle.
       if (m.active) {
         const near: { dot: Dot; dist: number }[] = [];

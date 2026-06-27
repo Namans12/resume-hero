@@ -11,7 +11,7 @@ const STIFFNESS = 0.18;
 const DAMPING   = 0.72;
 const PULL_DIST = 12; // px the handle travels down when pulled
 
-// Horizontal sway — softer spring so the thread swings left/right and settles
+// Horizontal sway - softer spring so the thread swings left/right and settles
 const SWAY_STIFFNESS = 0.022;
 const SWAY_DAMPING   = 0.94;
 const SWAY_IMPULSE   = 3.2; // velocity kick on each toggle
@@ -34,7 +34,7 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
   const isPulledRef = useRef(false);
   useEffect(() => { isPulledRef.current = isPulled; }, [isPulled]);
 
-  // Single persistent spring loop — runs once on mount, never restarts
+  // Single persistent spring loop - runs once on mount, never restarts
   const springPos = useRef(0);
   const springVel = useRef(0);
   const swayPos   = useRef(0);
@@ -73,7 +73,7 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
     };
     animationRef.current = requestAnimationFrame(tick);
     return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
-  }, []); // intentionally empty — persistent loop uses ref
+  }, []); // intentionally empty - persistent loop uses ref
 
   // Release the pull after 400 ms so spring bounces back
   useEffect(() => {
@@ -92,13 +92,13 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
 
   return (
     <>
-      {/* Hanging Lamp — fixed, scales from ceiling anchor */}
+      {/* Hanging Lamp - fixed, scales from ceiling anchor */}
       <div
         className={`fixed -top-14 right-0 sm:right-4 md:right-10 lg:right-16 z-50 pointer-events-none
           origin-top scale-90 sm:scale-105 lg:scale-[1.22]
           ${isMenuOpen ? 'blur-sm md:blur-none' : ''}`}
       >
-        {/* Inner wrapper handles opacity/slide — scale stays on outer so it never animates */}
+        {/* Inner wrapper handles opacity/slide - scale stays on outer so it never animates */}
         <div
           style={{
             position: 'relative',
@@ -153,7 +153,7 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
             />
             <circle cx="175" cy="0" r="4" fill="#6b7280" className="pointer-events-none" />
 
-            {/* Lamp body — g centred at x=175 in SVG space */}
+            {/* Lamp body - g centred at x=175 in SVG space */}
             <g id="light" transform="translate(6, 10)">
               {/* Bulb */}
               <path

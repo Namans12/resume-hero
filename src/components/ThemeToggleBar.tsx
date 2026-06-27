@@ -8,7 +8,7 @@ const NOISE = "url(\"data:image/svg+xml,<svg viewBox='0 0 300 300' xmlns='http:/
 interface ThemeToggleBarProps {
   isDark: boolean;
   onThemeChange: () => void;
-  /** 0–1 scroll progress — drives both opacity and slide-in */
+  /** 0–1 scroll progress - drives both opacity and slide-in */
   opacity: number;
 }
 
@@ -16,7 +16,7 @@ const ThemeToggleBar: React.FC<ThemeToggleBarProps> = ({ isDark, onThemeChange, 
   const slideY = (1 - opacity) * 20; // 20px above when hidden → 0 when fully visible
 
   return (
-    /* Outer: fixed position + scale — no animation here */
+    /* Outer: fixed position + scale - no animation here */
     <div
       style={{
         position: 'fixed',
@@ -98,7 +98,7 @@ const ThemeToggleBar: React.FC<ThemeToggleBarProps> = ({ isDark, onThemeChange, 
               transition: 'left 300ms ease, background-color 300ms ease, box-shadow 300ms ease',
             }}
           >
-            {/* Sun icon — visible in dark mode */}
+            {/* Sun icon - visible in dark mode */}
             <svg
               viewBox="0 0 24 24"
               fill="#c8d8f0"
@@ -115,7 +115,7 @@ const ThemeToggleBar: React.FC<ThemeToggleBarProps> = ({ isDark, onThemeChange, 
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
 
-            {/* Moon icon — visible in light mode */}
+            {/* Moon icon - visible in light mode */}
             <svg
               viewBox="0 0 24 24"
               fill="none"

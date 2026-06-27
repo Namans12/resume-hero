@@ -36,7 +36,7 @@ const ExploreButton: React.FC<ExploreButtonProps> = ({ isDark, onClick }) => {
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
           >
-            {/* Main span — keeps padding + shimmer ::after */}
+            {/* Main span - keeps padding + shimmer ::after */}
             <span>
               {/* Letters */}
               <span className={`btn-text ${hovered ? 'hide' : ''}`}>
@@ -55,7 +55,7 @@ const ExploreButton: React.FC<ExploreButtonProps> = ({ isDark, onClick }) => {
                 ))}
               </span>
 
-              {/* Arrow — burger lines morph into a down arrow */}
+              {/* Arrow - burger lines morph into a down arrow */}
               <span className={`btn-arrow ${hovered ? 'show' : ''}`} aria-hidden="true">
                 <span className="burger">
                   <span />
@@ -319,7 +319,7 @@ const StyledWrapper = styled.div.attrs<{ $isDark: boolean }>(p => ({
     z-index: 2;
   }
 
-  /* Burger group — rotated 90deg so the right-arrow morph points down */
+  /* Burger group - rotated 90deg so the right-arrow morph points down */
   .burger {
     --bsize: 1.15em;
     --bclr: var(--btn-arrow-color);
@@ -356,7 +356,7 @@ const StyledWrapper = styled.div.attrs<{ $isDark: boolean }>(p => ({
     transform: translateY(-100%);
   }
 
-  /* Shown (hovered) — collapse the outer lines into an arrowhead */
+  /* Shown (hovered) - collapse the outer lines into an arrowhead */
   .btn-arrow.show .burger span {
     opacity: 1;
   }

@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "Resume (this project)",
-      "description": "Vite 8 + React 19 + TypeScript 6 — hero section dev server",
+      "description": "Vite 8 + React 19 + TypeScript 6 - hero section dev server",
       "cwd": "/Users/naman/resume",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
@@ -12,7 +12,7 @@
     },
     {
       "name": "Portfolio Resume",
-      "description": "Vite 6 + React 18 + TypeScript 5.2 — full portfolio site",
+      "description": "Vite 6 + React 18 + TypeScript 5.2 - full portfolio site",
       "cwd": "/Users/naman/Mine/Portfolio_resume",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
@@ -20,7 +20,7 @@
     },
     {
       "name": "Shrimal & Associates",
-      "description": "Next.js 15 — legal firm website",
+      "description": "Next.js 15 - legal firm website",
       "cwd": "/Users/naman/Mine/rhythm",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],

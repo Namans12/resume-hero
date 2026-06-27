@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 
-// Shared particle coordinates — the EXACT same field powers both skies.
+// Shared particle coordinates - the EXACT same field powers both skies.
 const makePositions = (n: number): [number, number][] =>
   Array.from({ length: n }, () => [
     Math.floor(Math.random() * 2000),
@@ -23,7 +23,7 @@ const S1 = field(P1, '#FFF');
 const S2 = field(P2, '#FFF');
 const S3 = field(P3, '#FFF');
 
-// Day: IDENTICAL to the night stars (same positions, sizes, overlay, drift) —
+// Day: IDENTICAL to the night stars (same positions, sizes, overlay, drift) -
 // only the colour changes to a warm yellow-white sun-glare tint.
 const SUN_TINT = 'rgba(255,226,150,0.95)';
 const G1 = field(P1, SUN_TINT);

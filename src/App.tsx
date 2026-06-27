@@ -37,7 +37,7 @@ function App() {
         setStarsOpacity(Math.max(0, Math.min(1, p)));
         // Dots fade out smoothly (eased) over the first ~60% of scroll
         const td = Math.max(0, Math.min(1, sy / (vh * 0.6)));
-        const dEased = td * td * (3 - 2 * td); // smoothstep — gentle start & finish
+        const dEased = td * td * (3 - 2 * td); // smoothstep - gentle start & finish
         setDotsOpacity(1 - dEased);
       });
     };
