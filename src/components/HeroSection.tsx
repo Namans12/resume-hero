@@ -59,8 +59,18 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
       className="relative w-full min-h-screen overflow-hidden"
       style={{ zIndex: 0 }}
     >
-      {/* Decorative plants — behind the hero illustration */}
-      <HeroPlants isDark={isDark} />
+      {/* Decorative plants — behind the hero illustration; hidden while the
+          video plays so focus stays on the clip */}
+      <div
+        aria-hidden={playing}
+        style={{
+          opacity: playing ? 0 : 1,
+          transition: 'opacity 0.45s ease',
+          pointerEvents: playing ? 'none' : undefined,
+        }}
+      >
+        <HeroPlants isDark={isDark} />
+      </div>
 
       {/* Full-page illustration — object-contain, no cropping */}
       <img

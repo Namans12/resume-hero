@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 
 interface DottedBackgroundProps {
   isDark: boolean;
+  opacity?: number;
 }
 
 // Defaults mirrored from the polka-dot generator controls.
@@ -39,7 +40,7 @@ function hexToRgba(hex: string, alpha = 1) {
  * and continuously break/reform as the pointer moves. White dots in dark mode,
  * black dots in light mode.
  */
-const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
+const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dotsRef = useRef<Dot[]>([]);
   const mouseRef = useRef({ x: 0, y: 0, active: false });
@@ -179,8 +180,8 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="fixed inset-0 pointer-events-none"
-      style={{ zIndex: 0 }}
+      className="absolute top-0 left-0 pointer-events-none"
+      style={{ zIndex: 0, opacity, transition: 'opacity 0.5s ease' }}
     />
   );
 };

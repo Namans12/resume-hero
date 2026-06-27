@@ -96,10 +96,17 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
       <div
         className={`fixed -top-14 right-0 sm:right-4 md:right-10 lg:right-16 z-50 pointer-events-none
           origin-top scale-90 sm:scale-105 lg:scale-[1.22]
-          transition-[opacity,transform] duration-500
-          ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-8'}
           ${isMenuOpen ? 'blur-sm md:blur-none' : ''}`}
       >
+        {/* Inner wrapper handles opacity/slide — scale stays on outer so it never animates */}
+        <div
+          style={{
+            position: 'relative',
+            opacity: isVisible ? 1 : 0,
+            transform: isVisible ? 'translateY(0)' : 'translateY(-2rem)',
+            transition: 'opacity 500ms ease, transform 500ms ease',
+          }}
+        >
         {/* Ceiling anchor */}
         <div
           className={`w-7 h-3.5 rounded-b-xl mx-auto shadow-md ${isDark ? 'bg-gray-700' : 'bg-gray-800'}`}
@@ -266,6 +273,7 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
             </div>
           )}
         </div>
+        </div>{/* end inner animation wrapper */}
       </div>
 
       {/* Ambient warm glow (day mode) */}

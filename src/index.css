@@ -33,3 +33,46 @@ body {
 }
 
 html { scroll-behavior: smooth; }
+
+/* ── Cinematic side-nav ─────────────────────────────────────────── */
+.cine-nav__label {
+  display: inline-block;
+  font-family: "Manrope", sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.015em;
+  text-transform: uppercase;
+  line-height: 1.2;            /* roomy enough that descenders (j, p, g) aren't clipped */
+  padding-bottom: 0.12em;       /* extra space below baseline for background-clip:text */
+  white-space: nowrap;
+  cursor: pointer;
+  transform-origin: left center;
+  color: var(--cine-idle);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  /* scale + opacity are driven by a per-frame lerp in JS; only colour
+     transitions via CSS (for the active circle-clip fade). */
+  transition: color 450ms ease;
+  will-change: transform, opacity;
+}
+.cine-nav__label:hover { color: var(--cine-hover); }
+
+/* Active item — text becomes a window onto the floating circle SVG */
+.cine-nav__label.is-active {
+  color: transparent;
+  background-image: url('/circle-bg.svg');
+  background-color: var(--text-circle);
+  background-size: 360px;
+  background-position: 50% 80%;
+  background-repeat: no-repeat;
+  background-blend-mode: overlay;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: circleFloat 9s ease-in-out infinite alternate;
+}
+
+@keyframes circleFloat {
+  0%   { background-position: 44% 74%; background-size: 340px; }
+  50%  { background-position: 52% 84%; background-size: 380px; }
+  100% { background-position: 47% 90%; background-size: 350px; }
+}

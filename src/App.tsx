@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import HeroSection from './components/HeroSection';
 import PortfolioSection from './components/PortfolioSection';
 import DottedBackground from './components/DottedBackground';
+import StarBackground from './components/StarBackground';
+import ThemeToggleBar from './components/ThemeToggleBar';
 
 function App() {
   const [isDark, setIsDark] = useState(() => {
@@ -9,8 +11,14 @@ function App() {
     return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // The hanging lamp belongs to the hero scene — fade it out once scrolled past.
   const [heroActive, setHeroActive] = useState(true);
+
+  // 0 = hero fully visible, 1 = fully scrolled past hero
+  const [starsOpacity, setStarsOpacity] = useState(0);
+
+  // Dotted background fades out quickly so it doesn't show through the
+  // fading hero illustration during the scroll transition.
+  const [dotsOpacity, setDotsOpacity] = useState(1);
 
   useEffect(() => {
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
@@ -21,7 +29,16 @@ function App() {
     const onScroll = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        setHeroActive(window.scrollY < window.innerHeight * 0.35);
+        const vh = window.innerHeight;
+        const sy = window.scrollY;
+        setHeroActive(sy < vh * 0.35);
+        // Stars fade in between 40%–90% of viewport scroll
+        const p = (sy - vh * 0.4) / (vh * 0.5);
+        setStarsOpacity(Math.max(0, Math.min(1, p)));
+        // Dots fade out smoothly (eased) over the first ~60% of scroll
+        const td = Math.max(0, Math.min(1, sy / (vh * 0.6)));
+        const dEased = td * td * (3 - 2 * td); // smoothstep — gentle start & finish
+        setDotsOpacity(1 - dEased);
       });
     };
     window.addEventListener('scroll', onScroll, { passive: true });
@@ -30,12 +47,21 @@ function App() {
 
   const toggleTheme = () => setIsDark(prev => !prev);
 
+  // App background fades from opaque → transparent to reveal star background beneath
+  const bgRgb = isDark ? '11,11,15' : '255,255,255';
+  const bgColor = `rgba(${bgRgb},${1 - starsOpacity})`;
+
   return (
-    <div style={{ backgroundColor: isDark ? '#0b0b0f' : '#ffffff', transition: 'background-color 0.65s ease' }}>
-      <DottedBackground isDark={isDark} />
-      <HeroSection isDark={isDark} onThemeChange={toggleTheme} lampVisible={heroActive} />
-      <PortfolioSection isDark={isDark} />
-    </div>
+    <>
+      <StarBackground opacity={starsOpacity} isDark={isDark} />
+      {/* Toggle bar fades in as the star background takes over */}
+      <ThemeToggleBar isDark={isDark} onThemeChange={toggleTheme} opacity={starsOpacity} />
+      <div style={{ position: 'relative', backgroundColor: bgColor, transition: 'background-color 0.65s ease' }}>
+        <DottedBackground isDark={isDark} opacity={dotsOpacity} />
+        <HeroSection isDark={isDark} onThemeChange={toggleTheme} lampVisible={heroActive} />
+        <PortfolioSection isDark={isDark} />
+      </div>
+    </>
   );
 }
 
