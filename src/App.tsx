@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import HeroSection from './components/HeroSection';
-import PortfolioSection from './components/PortfolioSection';
 import DottedBackground from './components/DottedBackground';
 import StarBackground from './components/StarBackground';
 import ThemeToggleBar from './components/ThemeToggleBar';
 import BackToTopRocket from './components/BackToTopRocket';
+
+// Below-the-fold; code-split so GSAP + the portfolio load after the hero paints.
+const PortfolioSection = lazy(() => import('./components/PortfolioSection'));
 
 function App() {
   const [isDark, setIsDark] = useState(() => {
@@ -60,7 +62,9 @@ function App() {
       <div style={{ position: 'relative', backgroundColor: bgColor, transition: 'background-color 0.65s ease' }}>
         <DottedBackground isDark={isDark} opacity={dotsOpacity} />
         <HeroSection isDark={isDark} onThemeChange={toggleTheme} lampVisible={heroActive} />
-        <PortfolioSection isDark={isDark} />
+        <Suspense fallback={null}>
+          <PortfolioSection isDark={isDark} />
+        </Suspense>
       </div>
       <BackToTopRocket isDark={isDark} />
     </>

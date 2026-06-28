@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import HangingLamp from './HangingLamp';
 import ExploreButton from './ExploreButton';
 import HeroPlants from './HeroPlants';
-import heroDay from '../assets/hero-desk-day.png';
-import heroNight from '../assets/hero-desk-night.png';
+import heroDay from '../assets/hero-desk-day.webp';
+import heroNight from '../assets/hero-desk-night.webp';
 import avatarVideo from '../assets/avatar-typing.mp4';
 
 interface HeroSectionProps {
@@ -57,6 +57,22 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
     if (playing) videoRef.current?.play().catch(() => {});
   }, [playing]);
 
+  // A playing video composited while the page scrolls smears/ghosts. Stop the
+  // clip the moment the visitor scrolls away from the hero (listener is only
+  // attached while it's actually playing).
+  useEffect(() => {
+    if (!playing) return;
+    const stopOnScroll = () => {
+      if (window.scrollY > 30) {
+        setPlaying(false);
+        const v = videoRef.current;
+        if (v) { v.pause(); v.currentTime = 0; }
+      }
+    };
+    window.addEventListener('scroll', stopOnScroll, { passive: true });
+    return () => window.removeEventListener('scroll', stopOnScroll);
+  }, [playing]);
+
   return (
     <section
       className="relative w-full min-h-screen overflow-hidden"
@@ -106,6 +122,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         src={avatarVideo}
         playsInline
         muted
+        preload="none"
         draggable={false}
         onEnded={stopVideo}
         className="absolute inset-0 w-full h-full object-contain object-bottom select-none pointer-events-none"
