@@ -25,9 +25,8 @@ const EMAIL = 'namanshrimal12@gmail.com';
 const PHONE = '+91 74249 91005';
 
 const SOCIALS = [
-  { label: 'GitHub',   href: 'https://github.com/Namans12',                    icon: 'github' },
-  { label: 'LinkedIn', href: 'https://www.linkedin.com/in/naman-shrimal12/',   icon: 'linkedin' },
-  { label: 'Website',  href: 'https://naman1201.vercel.app/',                  icon: 'globe' },
+  { label: 'GitHub',   href: 'https://github.com/Namans12',                  icon: 'github' },
+  { label: 'LinkedIn', href: 'https://www.linkedin.com/in/naman-shrimal12/', icon: 'linkedin' },
 ];
 
 const skillGroups = [
@@ -250,6 +249,40 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
           building data engineering and AI systems, from production ETL pipelines on Databricks &amp; Delta Lake
           to client-facing Agentic AI workflows. I like turning messy data into reliable, intelligent products.
         </Body>
+
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.6 }}
+          transition={{ duration: 0.45, delay: 0.18 }}
+          className="mt-8 flex flex-wrap items-center gap-3"
+        >
+          <button
+            type="button"
+            onClick={() => scrollTo('projects')}
+            className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-base font-semibold transition-transform duration-200 hover:-translate-y-0.5"
+            style={{ color: isDark ? '#0b0b0f' : '#ffffff', backgroundColor: text, fontFamily: font }}
+          >
+            View my work
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <a
+            href="https://drive.google.com/file/d/1rX41qJsjLWSNjC9Q6jg7srcoSxN2rxCL/view?usp=sharing"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-base font-semibold no-underline transition-transform duration-200 hover:-translate-y-0.5"
+            style={{ color: text, border: `1px solid ${cardEdge}`, backgroundColor: cardBg, fontFamily: font }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 3v4a1 1 0 0 0 1 1h4" />
+              <path d="M16 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+              <path d="M9 13h6M9 17h4" />
+            </svg>
+            My resume
+          </a>
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 22 }}

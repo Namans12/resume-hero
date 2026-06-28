@@ -4,6 +4,7 @@ import PortfolioSection from './components/PortfolioSection';
 import DottedBackground from './components/DottedBackground';
 import StarBackground from './components/StarBackground';
 import ThemeToggleBar from './components/ThemeToggleBar';
+import BackToTopRocket from './components/BackToTopRocket';
 
 function App() {
   const [isDark, setIsDark] = useState(() => {
@@ -61,6 +62,7 @@ function App() {
         <HeroSection isDark={isDark} onThemeChange={toggleTheme} lampVisible={heroActive} />
         <PortfolioSection isDark={isDark} />
       </div>
+      <BackToTopRocket isDark={isDark} />
     </>
   );
 }

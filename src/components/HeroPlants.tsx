@@ -71,7 +71,7 @@ const HeroPlants: React.FC<HeroPlantsProps> = ({ isDark }) => {
           style={{
             position: 'absolute',
             top: p.top,
-            left: '-3%',
+            left: '-6.5%',
             width: p.width,
             opacity: p.opacity,
             transform: `rotate(${p.rotate}deg)`,
@@ -92,7 +92,7 @@ const HeroPlants: React.FC<HeroPlantsProps> = ({ isDark }) => {
           style={{
             position: 'absolute',
             top: p.top,
-            right: '-3%',
+            right: '-6%',
             width: p.width,
             opacity: p.opacity,
             transform: `rotate(${p.rotate}deg)`,

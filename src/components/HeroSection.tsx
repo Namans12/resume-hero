@@ -36,6 +36,9 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
   const nightActive = isDark;
 
   // "Watch me" - play a clip of the avatar over the static desk illustration.
+  const SHOW_WATCH_BUTTON = true;
+  // Shared position for the play/stop control - open dotted area, right of the head.
+  const watchBtnPos: React.CSSProperties = { left: '10%', top: '30%' };
   const [playing, setPlaying] = useState(false);
   const [hovered, setHovered] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -97,13 +100,12 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         }}
       />
 
-      {/* Avatar video - plays over both light/dark desk illustrations */}
+      {/* Avatar video - plays the clip once, then onEnded returns to the static desk */}
       <video
         ref={videoRef}
         src={avatarVideo}
         playsInline
         muted
-        loop
         draggable={false}
         onEnded={stopVideo}
         className="absolute inset-0 w-full h-full object-contain object-bottom select-none pointer-events-none"
@@ -114,19 +116,77 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         }}
       />
 
+      {/* Hero intro - name + tagline, top-left; fades out on scroll and
+          hides while the avatar clip is playing */}
+      <div
+        className="absolute z-10 pointer-events-none select-none"
+        style={{
+          left: 'clamp(3rem, 8.2vw, 9rem)',
+          top: 'clamp(1.5rem, 5.3vh, 6rem)',
+          opacity: playing ? 0 : fade,
+          transition: 'opacity 0.45s ease',
+        }}
+      >
+        <p
+          style={{
+            fontFamily: '"Manrope", sans-serif',
+            fontWeight: 700,
+            fontSize: 'clamp(0.76rem, 1.6vw, 1rem)',
+            letterSpacing: '0.24em',
+            textTransform: 'uppercase',
+            color: isDark ? '#8ea2ff' : '#4f46e5',
+            margin: 0,
+          }}
+        >
+          Hi, I&apos;m
+        </p>
+        <h1
+          style={{
+            fontFamily: '"Manrope", sans-serif',
+            fontWeight: 800,
+            fontSize: 'clamp(2.05rem, 5.3vw, 3.7rem)',
+            lineHeight: 1.05,
+            letterSpacing: '-0.015em',
+            // Pull the large "N" left ~3px so its stroke optically aligns with
+            // the kicker/tagline (whose glyphs have a smaller side-bearing).
+            textIndent: '-0.05em',
+            whiteSpace: 'nowrap',
+            color: isDark ? '#f3f4f6' : '#111827',
+            margin: '0.4rem 0 0',
+            textShadow: isDark ? '0 2px 24px rgba(0,0,0,0.45)' : '0 2px 24px rgba(255,255,255,0.55)',
+          }}
+        >
+          Naman Shrimal
+        </h1>
+        <p
+          style={{
+            fontFamily: '"Manrope", sans-serif',
+            fontWeight: 500,
+            fontSize: 'clamp(0.88rem, 1.65vw, 1.18rem)',
+            lineHeight: 1.4,
+            whiteSpace: 'nowrap',
+            color: isDark ? 'rgba(243,244,246,0.7)' : 'rgba(17,24,39,0.72)',
+            margin: '0.7rem 0 0',
+            textShadow: isDark ? '0 1px 16px rgba(0,0,0,0.55)' : '0 1px 16px rgba(255,255,255,0.75)',
+          }}
+        >
+          I turn messy data into intelligent products.
+        </p>
+      </div>
+
       {/* Play button ("Watch me") - shown when the clip isn't playing */}
-      {fade > 0.05 && !playing && (
+      {SHOW_WATCH_BUTTON && fade > 0.05 && !playing && (
         <button
           type="button"
           aria-label="Watch Me Build & Solve"
           onClick={startVideo}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
-          className="absolute left-20 top-6 sm:left-28 sm:top-8 z-10
+          className="absolute z-10
             flex items-center justify-center w-9 h-9
             transition-transform duration-300 hover:scale-110
             focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-          style={{ opacity: fade }}
+          style={{ ...watchBtnPos, opacity: fade }}
         >
           {/* Play triangle */}
           <svg width="38" height="38" viewBox="0 0 24 24" aria-hidden="true" style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))' }}>
@@ -154,22 +214,6 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
               </span>
             </span>
           )}
-        </button>
-      )}
-
-      {/* Square button - return to the current layout while the clip plays */}
-      {playing && (
-        <button
-          type="button"
-          aria-label="Back to layout"
-          onClick={stopVideo}
-          className="absolute left-20 top-6 sm:left-28 sm:top-8 z-10
-            flex items-center justify-center w-9 h-9
-            transition-transform duration-300 hover:scale-110
-            focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-        >
-          {/* Stop square */}
-          <span className="w-[26px] h-[26px] rounded-sm" style={{ background: isDark ? '#f3f4f6' : '#1f2937', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))' }} />
         </button>
       )}
 
