@@ -166,6 +166,20 @@ html { scroll-behavior: smooth; }
   padding: 0 0.95rem;
   white-space: nowrap;
 }
+/* ── Contact form fields ────────────────────────────────────────────
+   Accent/ring/placeholder colours come from CSS vars set on the <form>
+   so focus styling stays theme-aware without inline :focus rules. */
+.contact-input {
+  border: 1px solid var(--contact-edge);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.contact-input::placeholder { color: var(--contact-ph); opacity: 1; }
+.contact-input:focus {
+  outline: none;
+  border-color: var(--contact-accent);
+  box-shadow: 0 0 0 3px var(--contact-ring);
+}
+
 /* ── Footer social buttons ──────────────────────────────────────────
    Idle/edge/accent colours come from CSS vars set on the <footer> so the
    hover state can recolour without fighting inline styles. */

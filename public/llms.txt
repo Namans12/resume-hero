@@ -1,0 +1,37 @@
+# Naman Shrimal
+
+> Software Engineer at Navikenz building data engineering and AI systems — production ETL pipelines on Databricks & Delta Lake, machine learning, and client-facing Agentic AI workflows. Naman turns messy data into reliable, intelligent products.
+
+This is the personal portfolio of Naman Shrimal, hosted at https://namanshrimal.vercel.app/. Based in India (Work: Noida · Home: Jaipur).
+
+## About
+- Role: Software Engineer at Navikenz Ltd. (promoted from Intern, Oct 2025)
+- Focus: Data engineering, ML/AI, and production data platforms across Databricks, Spark, cloud, and web applications
+- Education: B.Tech — Computer Science & Engineering (AI & ML)
+
+## Skills
+- Languages: Python, SQL, JavaScript, TypeScript, HTML/CSS
+- Frameworks & ML: React, FastAPI, TensorFlow, Keras, OpenCV, Matplotlib
+- Data Engineering: Databricks, Apache Spark, PySpark, Delta Lake, Azure Data Factory, Microsoft Fabric
+- Concepts & Architecture: ETL/ELT pipelines, Lakehouse Architecture, Data Warehousing, Agentic AI
+- Cloud & DevOps: Microsoft Azure, Google Cloud, Docker, Terraform, GitHub
+- Databases: SQLite, Neo4j, MySQL
+
+## Projects
+- [NaviMed Scheduler](https://github.com/Namans12/NaviMed-Scheduler): A PPO reinforcement-learning patient-appointment scheduler, with FastAPI no-show scoring & ARIMA forecasting and an LLM booking chatbot on a Next.js dashboard.
+- [SignaText](https://github.com/Namans12/SignaText): Real-time American Sign Language to text — a 27-class CNN at 30+ FPS with NLP post-processing that assembles letters into words.
+- [HeartGuard AI](https://github.com/Namans12/HeartGuard-AI): A heart-disease risk predictor (Random Forest) returning low/moderate/high assessments, deployed with Gradio on Hugging Face Spaces.
+- [CogMem LLM](https://github.com/Namans12/cogmem-llm): A cognitive-memory architecture for LLMs — reasoning core, working memory, and typed long-term storage with episodic recall, a knowledge graph, and a skill library.
+- [Project Library](https://library1201.vercel.app): A wider collection of Naman's projects.
+
+## Certifications
+- Databricks Certified Data Engineer Associate
+- Microsoft Azure AI Engineer Associate
+- Microsoft Azure AI Fundamentals
+- Google Cloud — Introduction to Generative AI
+
+## Contact
+- Email: namanshrimal12@gmail.com
+- GitHub: https://github.com/Namans12
+- LinkedIn: https://www.linkedin.com/in/naman-shrimal12/
+- Resume: https://drive.google.com/file/d/1rX41qJsjLWSNjC9Q6jg7srcoSxN2rxCL/view?usp=sharing

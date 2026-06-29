@@ -1,5 +1,5 @@
-import React, { useLayoutEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import React, { useLayoutEffect, useRef, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import ProjectsCarousel from './ProjectsCarousel';
@@ -25,9 +25,19 @@ const SECTIONS = [
 const EMAIL = 'namanshrimal12@gmail.com';
 const PHONE = '+91 74249 91005';
 
+// Formspree form endpoint. Create a free form at https://formspree.io/ and paste
+// its URL here (it's a public form ID, safe to commit). Until it's set, the form
+// shows a "not configured yet" notice instead of silently failing.
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
+
 const SOCIALS = [
   { label: 'GitHub',   href: 'https://github.com/Namans12',                  icon: 'github' },
   { label: 'LinkedIn', href: 'https://www.linkedin.com/in/naman-shrimal12/', icon: 'linkedin' },
+];
+
+const LOCATIONS = [
+  { label: 'Work', place: 'Noida, India' },
+  { label: 'Home', place: 'Jaipur, India' },
 ];
 
 const skillGroups = [
@@ -472,48 +482,60 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
       <SectionShell id="contact" refCb={el => (sectionRefs.current[6] = el)}>
         <Eyebrow color={subtle}>Say hello</Eyebrow>
         <Heading color={text}>Contact</Heading>
-        <Body color={subtle}>
-          Always happy to talk data engineering, ML, or a good problem worth solving. Drop a line -
-          let&apos;s build something.
-        </Body>
 
-        <motion.a
-          href={`mailto:${EMAIL}`}
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.4 }}
-          className="mt-8 inline-flex items-center gap-2 px-7 py-3 rounded-full text-base font-semibold no-underline"
-          style={{ color: isDark ? '#0b0b0f' : '#ffffff', backgroundColor: text, fontFamily: font }}
-        >
-          {EMAIL}
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </motion.a>
+        <div className="mt-8 grid gap-10 lg:grid-cols-2 lg:items-start" style={{ maxWidth: '54rem' }}>
+          {/* Left - intro + direct links */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.4 }}
+            transition={{ duration: 0.45 }}
+          >
+            <p className="text-base sm:text-lg leading-relaxed" style={{ color: subtle, fontFamily: font, maxWidth: '30rem' }}>
+              Always happy to talk data engineering, ML, or a good problem worth solving. Use the form,
+              or reach out directly.
+            </p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.6 }}
-          transition={{ duration: 0.4, delay: 0.1 }}
-          className="mt-6 flex flex-wrap items-center gap-3"
-        >
-          {SOCIALS.map(s => (
             <a
-              key={s.label}
-              href={s.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold no-underline transition-colors"
-              style={{ color: text, border: `1px solid ${cardEdge}`, backgroundColor: cardBg, fontFamily: font }}
+              href={`mailto:${EMAIL}`}
+              className="mt-7 inline-flex items-center gap-2 px-7 py-3 rounded-full text-base font-semibold no-underline"
+              style={{ color: isDark ? '#0b0b0f' : '#ffffff', backgroundColor: text, fontFamily: font }}
             >
-              <Icon name={s.icon} size={18} />
-              {s.label}
+              {EMAIL}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </a>
-          ))}
-          <span className="text-sm" style={{ color: subtle, fontFamily: font }}>{PHONE}</span>
-        </motion.div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              {SOCIALS.map(s => (
+                <a
+                  key={s.label}
+                  href={s.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold no-underline transition-colors"
+                  style={{ color: text, border: `1px solid ${cardEdge}`, backgroundColor: cardBg, fontFamily: font }}
+                >
+                  <Icon name={s.icon} size={18} />
+                  {s.label}
+                </a>
+              ))}
+              <LocationPill text={text} cardBg={cardBg} cardEdge={cardEdge} accent={accent} subtle={subtle} font={font} />
+              <span className="text-sm" style={{ color: subtle, fontFamily: font }}>{PHONE}</span>
+            </div>
+          </motion.div>
+
+          {/* Right - Formspree-backed contact form */}
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.3 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
+            <ContactForm isDark={isDark} text={text} subtle={subtle} cardBg={cardBg} cardEdge={cardEdge} accent={accent} font={font} />
+          </motion.div>
+        </div>
       </SectionShell>
 
       {/* ── Footer ───────────────────────────────────────────────────── */}
@@ -592,6 +614,22 @@ const Icon: React.FC<{ name: string; size?: number }> = ({ name, size = 20 }) =>
           <path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18" />
         </svg>
       );
+    case 'location':
+      return (
+        <svg {...common} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10Z" />
+          <circle cx="12" cy="11" r="2.2" />
+        </svg>
+      );
+    case 'swap':
+      return (
+        <svg {...common} stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M7 4 3 8l4 4" />
+          <path d="M3 8h14" />
+          <path d="m17 20 4-4-4-4" />
+          <path d="M21 16H7" />
+        </svg>
+      );
     case 'mail':
       return (
         <svg {...common} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
@@ -650,6 +688,171 @@ const BrandLogo: React.FC<{ brand: string; size?: number }> = ({ brand, size = 2
     default:
       return null;
   }
+};
+
+/* ── Location pill - tap to switch between Home / Work ─────────────── */
+
+const LocationPill: React.FC<{
+  text: string; cardBg: string; cardEdge: string; accent: string; subtle: string; font: string;
+}> = ({ text, cardBg, cardEdge, accent, subtle, font }) => {
+  const [i, setI] = useState(0);
+  const loc = LOCATIONS[i];
+  const next = () => setI(p => (p + 1) % LOCATIONS.length);
+
+  return (
+    <button
+      type="button"
+      onClick={next}
+      title="Tap to switch location"
+      aria-label={`Location - ${loc.label}: ${loc.place}. Tap to switch.`}
+      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-transform duration-200 hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      style={{ color: text, border: `1px solid ${cardEdge}`, backgroundColor: cardBg, fontFamily: font, perspective: '600px' }}
+    >
+      <span style={{ color: accent }} aria-hidden><Icon name="location" size={16} /></span>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={i}
+          initial={{ rotateX: -90, opacity: 0 }}
+          animate={{ rotateX: 0, opacity: 1 }}
+          exit={{ rotateX: 90, opacity: 0 }}
+          transition={{ duration: 0.24, ease: 'easeOut' }}
+          style={{ display: 'inline-block', transformOrigin: 'center', backfaceVisibility: 'hidden', whiteSpace: 'nowrap' }}
+        >
+          <span className="text-[0.68rem] font-bold uppercase tracking-wider mr-1.5" style={{ color: accent }}>{loc.label}</span>
+          {loc.place}
+        </motion.span>
+      </AnimatePresence>
+      <motion.span
+        className="ml-0.5"
+        style={{ color: subtle, display: 'inline-flex' }}
+        animate={{ rotate: i * 180 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        aria-hidden
+      >
+        <Icon name="swap" size={13} />
+      </motion.span>
+    </button>
+  );
+};
+
+/* ── Contact form (Formspree-backed) ──────────────────────────────── */
+
+const ContactForm: React.FC<{
+  isDark: boolean;
+  text: string;
+  subtle: string;
+  cardBg: string;
+  cardEdge: string;
+  accent: string;
+  font: string;
+}> = ({ isDark, text, subtle, cardBg, cardEdge, accent, font }) => {
+  const [form, setForm] = useState({ name: '', email: '', message: '' });
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const inputBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,24,39,0.04)';
+  const ring    = isDark ? 'rgba(142,162,255,0.28)' : 'rgba(79,70,229,0.20)';
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (FORMSPREE_ENDPOINT.includes('YOUR_FORM_ID')) {
+      setStatus('error');
+      setErrorMsg('The contact form isn’t connected yet — add your Formspree endpoint.');
+      return;
+    }
+    setStatus('submitting');
+    setErrorMsg('');
+    try {
+      const res = await fetch(FORMSPREE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        setStatus('success');
+        setForm({ name: '', email: '', message: '' });
+      } else {
+        const data = await res.json().catch(() => null);
+        setStatus('error');
+        setErrorMsg(data?.errors?.[0]?.message ?? 'Something went wrong. Please try again.');
+      }
+    } catch {
+      setStatus('error');
+      setErrorMsg('Network error — please try again.');
+    }
+  };
+
+  const fieldStyle: React.CSSProperties = {
+    backgroundColor: inputBg,
+    color: text,
+    fontFamily: font,
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      noValidate
+      className="flex flex-col gap-5 rounded-2xl p-6 sm:p-7 border backdrop-blur-sm"
+      style={{
+        backgroundColor: cardBg,
+        borderColor: cardEdge,
+        ['--contact-accent' as string]: accent,
+        ['--contact-edge' as string]: cardEdge,
+        ['--contact-ring' as string]: ring,
+        ['--contact-ph' as string]: subtle,
+      }}
+    >
+      <div>
+        <label htmlFor="cf-name" className="block text-sm font-semibold mb-2" style={{ color: text, fontFamily: font }}>Name</label>
+        <input
+          id="cf-name" name="name" type="text" required autoComplete="name"
+          value={form.name} onChange={onChange} placeholder="Your name"
+          className="contact-input w-full rounded-xl px-4 py-3 text-base" style={fieldStyle}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="cf-email" className="block text-sm font-semibold mb-2" style={{ color: text, fontFamily: font }}>Email</label>
+        <input
+          id="cf-email" name="email" type="email" required autoComplete="email"
+          value={form.email} onChange={onChange} placeholder="your.email@example.com"
+          className="contact-input w-full rounded-xl px-4 py-3 text-base" style={fieldStyle}
+        />
+      </div>
+
+      <div>
+        <label htmlFor="cf-message" className="block text-sm font-semibold mb-2" style={{ color: text, fontFamily: font }}>Message</label>
+        <textarea
+          id="cf-message" name="message" required rows={5}
+          value={form.message} onChange={onChange} placeholder="Tell me about your project, role, or collaboration"
+          className="contact-input w-full rounded-xl px-4 py-3 text-base resize-y" style={fieldStyle}
+        />
+      </div>
+
+      <button
+        type="submit"
+        disabled={status === 'submitting'}
+        className="mt-1 inline-flex items-center justify-center px-7 py-3 rounded-full text-base font-semibold transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        style={{ color: isDark ? '#0b0b0f' : '#ffffff', backgroundColor: accent, fontFamily: font }}
+      >
+        {status === 'submitting' ? 'Sending…' : 'Send Message'}
+      </button>
+
+      {status === 'success' && (
+        <p className="text-sm font-medium" style={{ color: accent, fontFamily: font }}>
+          Thanks — your message is on its way. I&apos;ll get back to you soon.
+        </p>
+      )}
+      {status === 'error' && (
+        <p className="text-sm font-medium" style={{ color: isDark ? '#fca5a5' : '#dc2626', fontFamily: font }}>
+          {errorMsg}
+        </p>
+      )}
+    </form>
+  );
 };
 
 /* ── Shared section scaffolding ───────────────────────────────────── */

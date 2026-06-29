@@ -1,0 +1,6 @@
+# https://www.robotstxt.org/robotstxt.html
+# Personal portfolio - crawling welcome.
+User-agent: *
+Allow: /
+
+Sitemap: https://namanshrimal.vercel.app/sitemap.xml
