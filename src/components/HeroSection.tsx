@@ -101,7 +101,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         alt=""
         aria-hidden="true"
         draggable={false}
-        className="absolute inset-0 w-full h-full object-contain object-bottom select-none pointer-events-none"
+        className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
           opacity: dayActive && !playing ? fade : 0,
           zIndex: dayActive ? 1 : 2,
@@ -112,7 +112,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         src={heroNight}
         alt="Developer at desk"
         draggable={false}
-        className="absolute inset-0 w-full h-full object-contain object-bottom select-none pointer-events-none"
+        className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
           opacity: nightActive && !playing ? fade : 0,
           zIndex: nightActive ? 1 : 2,
@@ -129,7 +129,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         preload="none"
         draggable={false}
         onEnded={stopVideo}
-        className="absolute inset-0 w-full h-full object-contain object-bottom select-none pointer-events-none"
+        className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
           opacity: playing ? fade : 0,
           zIndex: 3,

@@ -4,6 +4,7 @@ import DottedBackground from './components/DottedBackground';
 import StarBackground from './components/StarBackground';
 import ThemeToggleBar from './components/ThemeToggleBar';
 import BackToTopRocket from './components/BackToTopRocket';
+import CustomCursor from './components/CustomCursor';
 
 // Below-the-fold; code-split so GSAP + the portfolio load after the hero paints.
 const PortfolioSection = lazy(() => import('./components/PortfolioSection'));
@@ -67,6 +68,7 @@ function App() {
         </Suspense>
       </div>
       <BackToTopRocket isDark={isDark} />
+      <CustomCursor />
     </>
   );
 }

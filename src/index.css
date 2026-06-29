@@ -34,6 +34,43 @@ body {
 
 html { scroll-behavior: smooth; }
 
+/* Section padding: comfortable on mobile/tablet (set via Tailwind px-5/px-8);
+   on desktop, reserve the original left gutter for the fixed side-nav so the
+   web layout is unchanged. */
+@media (min-width: 1024px) {
+  .section-shell {
+    padding-left: clamp(8.5rem, 26vw, 22rem);
+    padding-right: 5rem;
+  }
+}
+
+/* ── Custom gooey trailing cursor (desktop / fine-pointer only) ──────
+   The .has-custom-cursor class is added by CustomCursor.tsx only on
+   hover-capable devices, so touch screens keep their native behaviour. */
+html.has-custom-cursor,
+html.has-custom-cursor * { cursor: none !important; }
+
+.cursor-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99999;
+  pointer-events: none;
+  mix-blend-mode: difference;   /* inverts the backdrop -> works in light & dark */
+  filter: url(#cursor-goo);
+}
+.cursor-root span {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  transform-origin: center center;
+  will-change: transform;
+}
+
 /* ── Cinematic side-nav ─────────────────────────────────────────── */
 .cine-nav__label {
   display: inline-block;

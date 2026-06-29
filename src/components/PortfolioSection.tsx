@@ -224,13 +224,11 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
       <nav
         ref={navRef}
         aria-label="Sections"
-        className="fixed z-40 select-none"
+        className="fixed z-40 select-none hidden lg:flex lg:flex-col"
         style={{
           left: 'clamp(0.9rem, 3.5vw, 3.5rem)',
           top: '50%',
           transform: 'translateY(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
           gap: 'clamp(0.9rem, 2.6vh, 2rem)',   // generous vertical spacing
           maxWidth: 'min(42vw, 22rem)',         // keep labels within the left column
           opacity: 0,                           // hidden over the hero; revealed on scroll
@@ -868,9 +866,8 @@ const SectionShell: React.FC<{
   <section
     id={id}
     ref={refCb}
-    className="relative w-full min-h-screen flex flex-col justify-center
-               py-24 pr-6 sm:pr-10 lg:pr-20"
-    style={{ paddingLeft: 'clamp(8.5rem, 26vw, 22rem)' }}
+    className="section-shell relative w-full min-h-screen flex flex-col justify-center
+               py-20 sm:py-24 px-5 sm:px-8"
   >
     <div className="max-w-4xl">{children}</div>
   </section>
