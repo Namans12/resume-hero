@@ -258,7 +258,10 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         <Body color={subtle}>
           I&apos;m <strong style={{ color: text }}>Naman Shrimal</strong> - a Software Engineer at Navikenz
           building data engineering and AI systems, from production ETL pipelines on Databricks &amp; Delta Lake
-          to client-facing Agentic AI workflows. I like turning messy data into reliable, intelligent products.
+          to client-facing Agentic AI workflows. What drives me is a humanity-first approach: an early curiosity
+          about how AI could tackle the world&apos;s biggest challenges has grown into a mission to build systems
+          that improve real lives - from&nbsp;reinforcement learning for healthcare scheduling to making sign language
+          accessible as text. At the core of it, I turn messy data into reliable, intelligent products.
         </Body>
 
         <motion.div
@@ -301,7 +304,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
           viewport={{ once: true, amount: 0.5 }}
           transition={{ duration: 0.5, delay: 0.15 }}
           className="mt-8 rounded-2xl p-6 border backdrop-blur-sm"
-          style={{ backgroundColor: cardBg, borderColor: cardEdge, maxWidth: '38rem' }}
+          style={{ backgroundColor: cardBg, borderColor: cardEdge, maxWidth: '44rem' }}
         >
           <p className="text-xs font-semibold uppercase tracking-[0.22em]" style={{ color: accent, fontFamily: font }}>
             Education
@@ -310,7 +313,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
             B.Tech - Computer Science &amp; Engineering (AI &amp; ML)
           </h3>
           <p className="mt-1 text-base" style={{ color: subtle, fontFamily: font }}>
-            Jain University, Bengaluru
+            Jain (Deemed-to-be University), Bengaluru
           </p>
           <p className="mt-1 text-sm" style={{ color: subtle, fontFamily: font }}>
             2021 - 2025 · CGPA 8.10 / 10
@@ -323,7 +326,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
           viewport={{ once: true, amount: 0.6 }}
           transition={{ duration: 0.5, delay: 0.2 }}
           className="mt-6 text-base"
-          style={{ color: subtle, fontFamily: font, maxWidth: '38rem' }}
+          style={{ color: subtle, fontFamily: font, maxWidth: '51rem' }}
         >
           Beyond the keyboard, I volunteer with <strong style={{ color: text }}>Prayas</strong> (underprivileged
           education &amp; healthcare) and the <strong style={{ color: text }}>Go Nirvana Foundation</strong> (animal welfare).
@@ -905,7 +908,7 @@ const Body: React.FC<{ color: string; children: React.ReactNode }> = ({ color, c
     whileInView={{ opacity: 1, y: 0 }}
     viewport={{ once: true, amount: 0.5 }}
     transition={{ duration: 0.5, delay: 0.12 }}
-    className="mt-6 max-w-2xl text-lg"
+    className="mt-6 max-w-[51rem] text-lg"
     style={{ color, fontFamily: '"Manrope", sans-serif' }}
   >
     {children}
