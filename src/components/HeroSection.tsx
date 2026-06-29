@@ -6,6 +6,11 @@ import heroDay from '../assets/hero-desk-day.webp';
 import heroNight from '../assets/hero-desk-night.webp';
 import avatarVideo from '../assets/avatar-typing.mp4';
 
+// The clip plays through while scrolling - the static desk image is hidden during
+// playback, so the two avatar layers never overlap (which was the ghosting cause).
+// Flip to true to instead stop the clip on scroll, if a device ever shows smear.
+const STOP_VIDEO_ON_SCROLL = false;
+
 interface HeroSectionProps {
   isDark: boolean;
   onThemeChange: () => void;
@@ -57,13 +62,12 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
     if (playing) videoRef.current?.play().catch(() => {});
   }, [playing]);
 
-  // A playing video composited while the page scrolls smears/ghosts. Stop the
-  // clip the moment the visitor scrolls away from the hero (listener is only
-  // attached while it's actually playing).
+  // Stop the clip as soon as the visitor scrolls away from the hero - a playing
+  // video composited during scroll smears/ghosts.
   useEffect(() => {
-    if (!playing) return;
+    if (!STOP_VIDEO_ON_SCROLL || !playing) return;
     const stopOnScroll = () => {
-      if (window.scrollY > 30) {
+      if (window.scrollY > 0) {
         setPlaying(false);
         const v = videoRef.current;
         if (v) { v.pause(); v.currentTime = 0; }
@@ -99,7 +103,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         draggable={false}
         className="absolute inset-0 w-full h-full object-contain object-bottom select-none pointer-events-none"
         style={{
-          opacity: dayActive ? fade : 0,
+          opacity: dayActive && !playing ? fade : 0,
           zIndex: dayActive ? 1 : 2,
           transition: dayActive ? 'none' : 'opacity 0.65s ease',
         }}
@@ -110,7 +114,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         draggable={false}
         className="absolute inset-0 w-full h-full object-contain object-bottom select-none pointer-events-none"
         style={{
-          opacity: nightActive ? fade : 0,
+          opacity: nightActive && !playing ? fade : 0,
           zIndex: nightActive ? 1 : 2,
           transition: nightActive ? 'none' : 'opacity 0.65s ease',
         }}
@@ -129,7 +133,13 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         style={{
           opacity: playing ? fade : 0,
           zIndex: 3,
-          transition: 'opacity 0.45s ease',
+          // Instant swap with the static image (hidden while playing) so the two
+          // avatar layers never overlap; own GPU layer so the moving clip
+          // composites cleanly while the page scrolls.
+          transition: 'none',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden',
+          willChange: 'transform, opacity',
         }}
       />
 

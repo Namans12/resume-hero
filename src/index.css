@@ -76,3 +76,120 @@ html { scroll-behavior: smooth; }
   50%  { background-position: 52% 84%; background-size: 380px; }
   100% { background-position: 47% 90%; background-size: 350px; }
 }
+
+/* ── Projects accordion carousel ────────────────────────────────────
+   Expand/collapse is driven entirely by CSS (data-active for the default +
+   touch/keyboard selection, :hover for pointer devices) so hovering is
+   GPU-smooth with no React re-render per move. */
+.pcar-list { display: flex; }
+.pcar-item {
+  flex: 1 1 0%;
+  min-width: 0;
+  transition: flex-grow 0.55s cubic-bezier(0.55, 0.24, 0.18, 1);
+}
+.pcar-item[data-active] { flex-grow: 6; }
+.pcar-list:hover .pcar-item { flex-grow: 1; }
+.pcar-list:hover .pcar-item:hover { flex-grow: 6; }
+
+.pcar-img { filter: saturate(0.25) brightness(0.82); transition: filter 0.55s ease; }
+.pcar-item[data-active] .pcar-img { filter: none; }
+.pcar-list:hover .pcar-item[data-active] .pcar-img { filter: saturate(0.25) brightness(0.82); }
+.pcar-list:hover .pcar-item:hover .pcar-img { filter: none; }
+
+/* Asymmetric fade: text vanishes quickly on collapse (before the shrinking
+   width can re-wrap/reflow it), and eases back in once the card has widened. */
+.pcar-detail { opacity: 0; transition: opacity 0.18s ease; }
+.pcar-item[data-active] .pcar-detail { opacity: 1; transition: opacity 0.4s ease 0.5s; }
+.pcar-list:hover .pcar-item[data-active] .pcar-detail { opacity: 0; transition: opacity 0.18s ease; }
+.pcar-list:hover .pcar-item:hover .pcar-detail { opacity: 1; transition: opacity 0.4s ease 0.5s; }
+
+/* Heading: a centred vertical label on the collapsed strip that morphs into a
+   horizontal label at the bottom-left when the card opens. translate(-50%,-50%)
+   keeps it centred for any name length; the open state slides it to the corner. */
+.pcar-name {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center center;
+  transition:
+    transform 0.55s cubic-bezier(0.55, 0.24, 0.18, 1),
+    left 0.55s cubic-bezier(0.55, 0.24, 0.18, 1),
+    top 0.55s cubic-bezier(0.55, 0.24, 0.18, 1);
+}
+.pcar-item[data-active] .pcar-name {
+  left: 1.25rem;
+  top: calc(100% - 1.25rem);
+  transform: translate(0, -100%) rotate(0deg);
+}
+.pcar-list:hover .pcar-item[data-active] .pcar-name {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+}
+.pcar-list:hover .pcar-item:hover .pcar-name {
+  left: 1.25rem;
+  top: calc(100% - 1.25rem);
+  transform: translate(0, -100%) rotate(0deg);
+}
+
+.pcar-card { transition: box-shadow 0.55s ease; }
+.pcar-item[data-active] .pcar-card { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4); }
+.pcar-list:hover .pcar-item[data-active] .pcar-card { box-shadow: none; }
+.pcar-list:hover .pcar-item:hover .pcar-card { box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4); }
+
+/* The "View on GitHub" link is only clickable while its card is open (the rest
+   of the card just expands/pins the slide). */
+.pcar-link { pointer-events: none; }
+.pcar-item[data-active] .pcar-link { pointer-events: auto; }
+.pcar-list:hover .pcar-item[data-active] .pcar-link { pointer-events: none; }
+.pcar-list:hover .pcar-item:hover .pcar-link { pointer-events: auto; }
+
+/* "View More" -> "Project Library" pill: the two labels are stacked and the
+   track slides up on hover/focus to swap them. The pill is the height of a
+   single label, so overflow:hidden clips the other until it slides into view.
+   A fixed right gutter on the wrapper reserves room beside the cards. */
+.pcar-wrap { padding-right: 11rem; }
+.pcar-more { height: 2.55rem; overflow: hidden; }
+.pcar-more__track {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.45s cubic-bezier(0.55, 0.24, 0.18, 1);
+}
+.pcar-more:hover .pcar-more__track,
+.pcar-more:focus-visible .pcar-more__track { transform: translateY(-50%); }
+.pcar-more__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  height: 2.55rem;
+  padding: 0 0.95rem;
+  white-space: nowrap;
+}
+/* ── Footer social buttons ──────────────────────────────────────────
+   Idle/edge/accent colours come from CSS vars set on the <footer> so the
+   hover state can recolour without fighting inline styles. */
+.footer-soc {
+  color: var(--foot-idle);
+  border: 1px solid var(--foot-edge);
+  background-color: var(--foot-bg);
+  transition: color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+.footer-soc:hover,
+.footer-soc:focus-visible {
+  color: var(--foot-accent);
+  border-color: var(--foot-accent);
+  transform: translateY(-3px);
+}
+
+/* On narrow screens drop the pill below the cards instead of beside them. */
+@media (max-width: 640px) {
+  .pcar-wrap { padding-right: 0; }
+  .pcar-more {
+    position: static !important;
+    transform: none !important;
+    display: block !important;
+    width: max-content;
+    margin: 1.1rem auto 0 !important;
+  }
+}

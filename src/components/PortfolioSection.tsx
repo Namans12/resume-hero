@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import ProjectsCarousel from './ProjectsCarousel';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -53,37 +54,31 @@ const experience = [
       'Led the Navisphere POC - migrated Databricks analytics workloads to a React self-serve web interface, cutting analyst dependency for ad-hoc warehousing queries.',
     ],
   },
-];
-
-const projects = [
   {
-    title: 'NaviMed Scheduler',
-    tag: 'Reinforcement Learning · Healthcare',
-    desc: 'A smart patient appointment system. A PPO agent trained for 500k timesteps in a simulated 3-doctor, 32-slot/day clinic - with emergencies, priority tiers and no-show risk - hit 100% scheduling success (37.35 avg reward, ~4× the untrained baseline). FastAPI microservices serve RL inference, no-show scoring over a 110k-appointment dataset, and ARIMA demand forecasting to a Next.js dashboard, with an LLM chatbot for booking & rescheduling.',
-    stack: ['Python', 'FastAPI', 'Stable-Baselines3', 'Next.js', 'ARIMA', 'SQLite'],
-    href: 'https://github.com/Namans12/NaviMed-Scheduler',
-  },
-  {
-    title: 'SignaText',
-    tag: 'Computer Vision · NLP',
-    desc: 'Real-time American Sign Language to text. A 27-class CNN (843K params) recognizes fingerspelling through a two-stage pipeline - a main CNN plus letter-group classifiers for visually similar pairs - gated by a 50-frame stability window, running 30+ FPS on CPU. NLP post-processing assembles recognized letters into coherent words and sentences.',
-    stack: ['TensorFlow', 'Keras', 'OpenCV', 'MediaPipe', 'CNN'],
-    href: 'https://github.com/Namans12/SignaText',
+    role: 'Research & Development',
+    org: 'Independent Projects',
+    span: 'July 2023 - Feb 2025',
+    points: [
+      { text: 'Authored and published a research paper on a faster multi-document hybrid summarization model built on Primera and Pegasus.', readMore: 'Read More', href: '' },
+      'Designed and trained models across NLP, computer vision, and reinforcement learning - with TensorFlow, Keras, and PPO.',
+      'Engineered RESTful APIs in FastAPI, layering in authentication, custom middleware, and SQLAlchemy-backed persistence.',
+      'Earned an internship offer as a finalist at the Lumen hackathon, and placed 2nd at the national Honeywell engineering challenge and the Formidium hackathon.',
+    ],
   },
 ];
 
 const achievements = [
   { title: 'Finalist - Lumen Hackathon',                detail: 'Shortlisted for interview and received an internship offer.' },
-  { title: '2nd Place - Formidium Hackathon',           detail: 'Blockchain & AI category.' },
-  { title: '2nd Place - Honeywell International Hackathon', detail: 'National-level engineering challenge.' },
   { title: 'Published Research',                         detail: 'Faster Multi-Document Summarization using Primera & Pegasus NLP models.' },
+  { title: '2nd Place - Honeywell International Hackathon', detail: 'National-level engineering challenge.' },
+  { title: '2nd Place - Formidium Hackathon',           detail: 'Blockchain & AI category.' },
 ];
 
 const certifications = [
-  { name: 'Databricks Certified Data Engineer Associate', by: 'Databricks' },
-  { name: 'Azure AI Engineer Associate',                  by: 'Microsoft' },
-  { name: 'Azure AI Fundamentals',                        by: 'Microsoft' },
-  { name: 'Introduction to Generative AI',                by: 'Google Cloud' },
+  { name: 'Databricks Certified Data Engineer Associate', by: 'Databricks',   brand: 'databricks' },
+  { name: 'Azure AI Engineer Associate',                  by: 'Microsoft',    brand: 'microsoft' },
+  { name: 'Azure AI Fundamentals',                        by: 'Microsoft',    brand: 'microsoft' },
+  { name: 'Introduction to Generative AI',                by: 'Google Cloud', brand: 'google' },
 ];
 
 // Nav scaling tuning
@@ -108,9 +103,9 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
     // Target values written on scroll; current values lerped toward them
     // every frame so the font sizing glides smoothly between sections.
     const targetScale = new Array(n).fill(MIN_SCALE);
-    const targetOpac  = new Array(n).fill(0.32);
+    const targetOpac  = new Array(n).fill(0.65);
     const curScale    = new Array(n).fill(MIN_SCALE);
-    const curOpac     = new Array(n).fill(0.32);
+    const curOpac     = new Array(n).fill(0.65);
 
     // Compute targets from scroll position (cheap; runs on every scroll tick)
     const updateTargets = () => {
@@ -140,7 +135,8 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         const t = Math.min(dists[i] / FALLOFF, 1);   // 0 = centred, 1 = far
         const eased = t * t * (3 - 2 * t);            // smoothstep
         targetScale[i] = MAX_SCALE - eased * (MAX_SCALE - MIN_SCALE);
-        targetOpac[i]  = 0.32 + (1 - eased) * 0.68;
+        // Floor raised so far items stay legible; depth now comes mainly from scale.
+        targetOpac[i]  = 0.65 + (1 - eased) * 0.35;
 
         const el = navItemRefs.current[i];
         if (el) {
@@ -197,6 +193,11 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
 
   const font = '"Manrope", sans-serif';
 
+  const footerLinks = [
+    { label: 'Email',    href: `mailto:${EMAIL}`, icon: 'mail',     external: false },
+    ...SOCIALS.map(s => ({ label: s.label, href: s.href, icon: s.icon, external: true })),
+  ];
+
   return (
     <div
       ref={rootRef}
@@ -204,8 +205,8 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         position: 'relative',
         zIndex: 1,
         // theme tokens consumed by .cine-nav__label in index.css
-        ['--cine-idle' as string]:  isDark ? 'rgba(243,244,246,0.30)' : 'rgba(17,24,39,0.28)',
-        ['--cine-hover' as string]: isDark ? 'rgba(243,244,246,0.70)' : 'rgba(17,24,39,0.65)',
+        ['--cine-idle' as string]:  isDark ? 'rgba(243,244,246,0.62)' : 'rgba(17,24,39,0.58)',
+        ['--cine-hover' as string]: isDark ? 'rgba(243,244,246,0.95)' : 'rgba(17,24,39,0.90)',
         ['--text-circle' as string]: isDark ? '#cdd2f0' : '#3a3f63',
       }}
     >
@@ -299,7 +300,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
             B.Tech - Computer Science &amp; Engineering (AI &amp; ML)
           </h3>
           <p className="mt-1 text-base" style={{ color: subtle, fontFamily: font }}>
-            Jain (Deemed-to-be University), Bengaluru
+            Jain University, Bengaluru
           </p>
           <p className="mt-1 text-sm" style={{ color: subtle, fontFamily: font }}>
             2021 - 2025 · CGPA 8.10 / 10
@@ -370,16 +371,38 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
                 </h3>
                 <span className="text-sm whitespace-nowrap" style={{ color: subtle, fontFamily: font }}>{job.span}</span>
               </div>
-              <div className="mt-1 flex items-center gap-2 flex-wrap text-sm" style={{ color: subtle, fontFamily: font }}>
-                <span>{job.location}</span>
-                <span aria-hidden>•</span>
-                <span>{job.note}</span>
-              </div>
+              {(job.location || job.note) && (
+                <div className="mt-1 flex items-center gap-2 flex-wrap text-sm" style={{ color: subtle, fontFamily: font }}>
+                  {job.location && <span>{job.location}</span>}
+                  {job.location && job.note && <span aria-hidden>•</span>}
+                  {job.note && <span>{job.note}</span>}
+                </div>
+              )}
               <ul className="mt-5 flex flex-col gap-3">
                 {job.points.map((pt, pi) => (
                   <li key={pi} className="flex gap-3 text-[0.95rem] leading-relaxed" style={{ color: subtle, fontFamily: font }}>
                     <span className="mt-2 shrink-0 w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accent }} />
-                    <span>{pt}</span>
+                    <span>
+                      {typeof pt === 'string' ? pt : (
+                        <>
+                          {pt.text}
+                          {pt.href && (
+                            <>
+                              {' '}
+                              <a
+                                href={pt.href}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-semibold no-underline hover:underline"
+                                style={{ color: accent }}
+                              >
+                                {pt.readMore ?? 'Read More'}
+                              </a>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -391,52 +414,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
       <SectionShell id="projects" refCb={el => (sectionRefs.current[3] = el)}>
         <Eyebrow color={subtle}>Selected work</Eyebrow>
         <Heading color={text}>Projects</Heading>
-        <div className="mt-10 grid gap-6 sm:grid-cols-2" style={{ maxWidth: '50rem' }}>
-          {projects.map((p, i) => (
-            <motion.a
-              key={p.title}
-              href={p.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              initial={{ opacity: 0, y: 36 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.3 }}
-              transition={{ duration: 0.5, delay: i * 0.08 }}
-              whileHover={{ y: -6 }}
-              className="group rounded-2xl p-7 border backdrop-blur-sm cursor-pointer flex flex-col no-underline"
-              style={{ backgroundColor: cardBg, borderColor: cardEdge }}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span
-                  className="inline-block text-xs font-semibold uppercase tracking-[0.16em] px-3 py-1 rounded-full"
-                  style={{ color: subtle, border: `1px solid ${cardEdge}`, fontFamily: font }}
-                >
-                  {p.tag}
-                </span>
-                <span
-                  className="shrink-0 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
-                  style={{ color: subtle }}
-                  aria-hidden
-                >
-                  <Icon name="github" size={20} />
-                </span>
-              </div>
-              <h3 className="mt-5 text-2xl font-bold" style={{ color: text, fontFamily: font }}>{p.title}</h3>
-              <p className="mt-3 text-[0.95rem] leading-relaxed" style={{ color: subtle, fontFamily: font }}>{p.desc}</p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {p.stack.map(s => (
-                  <span
-                    key={s}
-                    className="px-2.5 py-1 rounded-md text-xs font-semibold"
-                    style={{ color: subtle, backgroundColor: cardBg, border: `1px solid ${cardEdge}`, fontFamily: font }}
-                  >
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </motion.a>
-          ))}
-        </div>
+        <ProjectsCarousel isDark={isDark} />
       </SectionShell>
 
       <SectionShell id="achievements" refCb={el => (sectionRefs.current[4] = el)}>
@@ -453,7 +431,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
               className="rounded-2xl p-6 border backdrop-blur-sm flex gap-4"
               style={{ backgroundColor: cardBg, borderColor: cardEdge }}
             >
-              <span className="shrink-0 mt-0.5" style={{ color: accent }} aria-hidden>
+              <span className="shrink-0 mt-0.5" style={{ color: i < 2 ? '#D4AF37' : '#C0C0C0' }} aria-hidden>
                 <Icon name="trophy" size={22} />
               </span>
               <div>
@@ -479,8 +457,8 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
               className="rounded-xl px-6 py-4 border flex items-center gap-4"
               style={{ backgroundColor: cardBg, borderColor: cardEdge }}
             >
-              <span className="shrink-0" style={{ color: accent }} aria-hidden>
-                <Icon name="badge" size={24} />
+              <span className="shrink-0 inline-flex" aria-hidden>
+                <BrandLogo brand={c.brand} size={28} />
               </span>
               <div className="min-w-0">
                 <h3 className="text-lg font-bold leading-snug" style={{ color: text, fontFamily: font }}>{c.name}</h3>
@@ -537,6 +515,55 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
           <span className="text-sm" style={{ color: subtle, fontFamily: font }}>{PHONE}</span>
         </motion.div>
       </SectionShell>
+
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <footer
+        className="relative w-full px-6 sm:px-10 pt-2.5 pb-3"
+        style={{
+          borderTop: `1px solid ${cardEdge}`,
+          ['--foot-edge' as string]:   cardEdge,
+          ['--foot-bg' as string]:     cardBg,
+          ['--foot-idle' as string]:   subtle,
+          ['--foot-accent' as string]: accent,
+        }}
+      >
+        <div className="mx-auto grid max-w-5xl grid-cols-1 sm:grid-cols-3 items-center gap-6">
+          {/* Left - name */}
+          <a
+            href="#about"
+            onClick={(e) => { e.preventDefault(); scrollTo('about'); }}
+            className="text-lg font-extrabold no-underline justify-self-center sm:justify-self-start"
+            style={{ color: text, fontFamily: font, letterSpacing: '-0.01em' }}
+          >
+            Naman Shrimal
+          </a>
+
+          {/* Center - social icons */}
+          <nav aria-label="Social links" className="flex items-center gap-3 justify-self-center">
+            {footerLinks.map(l => (
+              <a
+                key={l.label}
+                href={l.href}
+                aria-label={l.label}
+                {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                className="footer-soc inline-flex items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                style={{ width: 46, height: 46 }}
+              >
+                <Icon name={l.icon} size={20} />
+              </a>
+            ))}
+          </nav>
+
+          {/* Right - copyright */}
+          <p
+            className="text-sm leading-relaxed justify-self-center sm:justify-self-end text-center sm:text-right"
+            style={{ color: subtle, fontFamily: font }}
+          >
+            © {new Date().getFullYear()} Naman Shrimal ·<br />
+            All Rights Reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };
@@ -565,6 +592,13 @@ const Icon: React.FC<{ name: string; size?: number }> = ({ name, size = 20 }) =>
           <path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18" />
         </svg>
       );
+    case 'mail':
+      return (
+        <svg {...common} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <path d="m3.5 7 8.5 6 8.5-6" />
+        </svg>
+      );
     case 'trophy':
       return (
         <svg {...common} stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
@@ -578,6 +612,39 @@ const Icon: React.FC<{ name: string; size?: number }> = ({ name, size = 20 }) =>
           <circle cx="12" cy="9" r="6" />
           <path d="m8.5 13.5-1 7 4.5-2.5 4.5 2.5-1-7" />
           <path d="m9.5 9 1.7 1.7L14.5 7.5" />
+        </svg>
+      );
+    default:
+      return null;
+  }
+};
+
+/* Certification provider logos, in their brand colours. (Microsoft / Azure are
+   absent from most icon sets for brand-policy reasons, so it's inlined here.) */
+const BrandLogo: React.FC<{ brand: string; size?: number }> = ({ brand, size = 28 }) => {
+  switch (brand) {
+    case 'databricks':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label="Databricks">
+          <path fill="#FF3621" d="M.95 14.184L12 20.403l9.919-5.55v2.21L12 22.662l-10.484-5.96-.565.308v.77L12 24l11.05-6.218v-4.317l-.515-.309L12 19.118l-9.867-5.653v-2.21L12 16.805l11.05-6.218V6.32l-.515-.308L12 11.974 2.647 6.681 12 1.388l7.76 4.368.668-.411v-.566L12 0 .95 6.27v.72L12 13.207l9.919-5.55v2.26L12 15.52 1.516 9.56l-.565.308Z" />
+        </svg>
+      );
+    case 'microsoft':
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label="Microsoft">
+          <rect x="1"  y="1"  width="10" height="10" fill="#F25022" />
+          <rect x="13" y="1"  width="10" height="10" fill="#7FBA00" />
+          <rect x="1"  y="13" width="10" height="10" fill="#00A4EF" />
+          <rect x="13" y="13" width="10" height="10" fill="#FFB900" />
+        </svg>
+      );
+    case 'google':
+      return (
+        <svg width={size} height={size} viewBox="0 0 48 48" role="img" aria-label="Google">
+          <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z" />
+          <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
+          <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
+          <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571.001-.001.002-.001.003-.002l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z" />
         </svg>
       );
     default:
