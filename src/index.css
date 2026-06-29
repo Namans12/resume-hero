@@ -71,44 +71,33 @@ html.has-custom-cursor * { cursor: none !important; }
   will-change: transform;
 }
 
-/* ── Scroll-follow path (right side, About -> footer) - pure CSS scroll-driven ──
-   The draw, dot and fade are driven by the page scroll position via
-   animation-timeline: scroll() (no JS scroll loop - runs on the compositor).
-   JS only sets --sp-start/--sp-end (range) and --sp-len (path length) once.
-   Hidden by default; the animation is added only where scroll timelines exist. */
-.scroll-path { opacity: 0; }
-.scroll-path__draw {
-  stroke-dasharray: 1010;
-  stroke-dashoffset: 1010;   /* hidden until the scroll animation runs (path length ~996) */
-}
+/* ── Scroll-follow path (right side) - page-anchored, draws to mid-screen ──
+   The line is anchored in the page and scrolls with the content; the draw is
+   driven by scroll position (animation-timeline: scroll()) so it stays solid
+   down to the middle of the viewport and unfilled below - always ~half drawn in
+   view, completing at the footer. pathLength="100" normalises the dash so the
+   draw works for any generated length. JS sets --sp-start/--sp-end once. */
+.scroll-path__draw { stroke-dasharray: 100; stroke-dashoffset: 100; }
 
 @supports (animation-timeline: scroll()) {
-  .scroll-path {
-    animation: spFade linear both;
-    animation-timeline: scroll(root block);
-    animation-range-start: var(--sp-start, 12%);
-    animation-range-end: var(--sp-end, 92%);
-  }
   .scroll-path__draw {
     animation: spDraw linear both;
     animation-timeline: scroll(root block);
-    animation-range-start: var(--sp-start, 12%);
-    animation-range-end: var(--sp-end, 92%);
+    animation-range-start: var(--sp-start, 0px);
+    animation-range-end: var(--sp-end, 100%);
   }
   .scroll-path__dot {
     offset-rotate: 0deg;
     animation: spDot linear both, scrollDotPulse 1.8s ease-in-out infinite;
     animation-timeline: scroll(root block), auto;
-    animation-range-start: var(--sp-start, 12%);
-    animation-range-end: var(--sp-end, 92%);
+    animation-range-start: var(--sp-start, 0px);
+    animation-range-end: var(--sp-end, 100%);
   }
 }
 
-/* Fade in as About enters, then stay visible through the bottom (no fade-out). */
-@keyframes spFade { 0% { opacity: 0; } 8%, 100% { opacity: 1; } }
-@keyframes spDraw { from { stroke-dashoffset: 1010; } to { stroke-dashoffset: 0; } }
+@keyframes spDraw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
 @keyframes spDot  { from { offset-distance: 0%; } to { offset-distance: 100%; } }
-@keyframes scrollDotPulse { 0%, 100% { r: 7px; } 50% { r: 9.5px; } }
+@keyframes scrollDotPulse { 0%, 100% { r: 6px; } 50% { r: 8px; } }
 
 /* ── Cinematic side-nav ─────────────────────────────────────────── */
 .cine-nav__label {

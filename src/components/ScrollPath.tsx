@@ -1,57 +1,103 @@
 import { useEffect, useRef } from 'react';
 
-/* A thick, complex line fixed to the right that draws as you scroll - from the
-   About section to just above the footer - with a glowing dot riding the leading
-   edge (via offset-path). The draw, dot and fade are PURE CSS scroll-driven
-   animations (animation-timeline: scroll()), so there's no per-frame JS - it
-   runs on the compositor. JS only measures the scroll range + path length once.
-   Desktop only; progressively enhanced (hidden where scroll timelines aren't supported). */
+/* A line anchored to the page (absolute) alongside the right edge, spanning the
+   About section down to just above the footer. It SCROLLS WITH the content - you
+   only see the on-screen slice - and draws solid down to the middle of the
+   viewport, leaving the part below the middle unfilled. So it's always ~half
+   drawn in view, completing only as you reach the footer. Pure CSS scroll-driven
+   (animation-timeline: scroll()); JS only measures the geometry on load/resize.
+   Desktop only. */
 
-// A deliberate flowing vertical curve - three smooth S-swings (viewBox 0 0 100 1000).
-const PATH_D =
-  'M 50 8 C 96 120 10 232 50 360 C 90 484 12 596 50 720 C 84 812 20 900 50 992';
+// Build a winding vertical line that fills the given pixel box (1:1 with the viewBox).
+const buildPath = (w: number, h: number) => {
+  const cx = w / 2;
+  const amp = w * 0.34;
+  const seg = Math.max(5, Math.round(h / 340)); // a gentle wave roughly every 340px
+  let d = `M ${cx} 0`;
+  for (let i = 1; i <= seg; i++) {
+    const y = (h * i) / seg;
+    const py = (h * (i - 1)) / seg;
+    const x = cx + (i % 2 ? amp : -amp);
+    const px = cx + ((i - 1) % 2 ? amp : -amp);
+    const my = (py + y) / 2;
+    d += ` C ${px.toFixed(1)} ${my.toFixed(1)} ${x.toFixed(1)} ${my.toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }
+  return d;
+};
+
+const W = 78;
+// Where the drawing frontier (the end-point dot) sits down the viewport.
+// 0.5 = middle, ~0.85 = lower third (near the bottom), 1 = very bottom edge.
+const FRONTIER = 0.80;
 
 const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const trackRef = useRef<SVGPathElement>(null);
+  const drawRef = useRef<SVGPathElement>(null);
   const dotRef = useRef<SVGCircleElement>(null);
 
   useEffect(() => {
     const wrap = wrapRef.current;
+    const svg = svgRef.current;
+    const track = trackRef.current;
+    const draw = drawRef.current;
     const dot = dotRef.current;
-    if (!wrap || !dot) return;
+    if (!wrap || !svg || !track || !draw || !dot) return;
     if (!window.matchMedia('(min-width: 1024px)').matches) return;
 
-    // The dot's motion path - set once.
-    dot.style.offsetPath = `path("${PATH_D}")`;
-
-    // Map the scroll-driven range to About -> just-above-footer. Runs only on
-    // load/resize (no per-scroll JS); the animation itself is pure CSS.
     let raf = 0;
-    const setRange = () => {
+    const measure = () => {
       const about = document.getElementById('about');
       const footer = document.querySelector('footer');
-      if (!about || !footer) { raf = requestAnimationFrame(setRange); return; }
+      if (!about || !footer) { raf = requestAnimationFrame(measure); return; }
+
       const vh = window.innerHeight;
-      const start = Math.max(0, about.getBoundingClientRect().top + window.scrollY - vh * 0.85);
-      const end = footer.getBoundingClientRect().top + window.scrollY - vh;
-      wrap.style.setProperty('--sp-start', `${Math.round(start)}px`);
-      wrap.style.setProperty('--sp-end', `${Math.round(Math.max(start + 1, end))}px`);
+      // Anchor the line's top to the "About" heading itself (not the section top,
+      // which sits above the eyebrow).
+      const headingEl = about.querySelector('h2') ?? about;
+      const lineTop = headingEl.getBoundingClientRect().top + window.scrollY;
+      // End the line so the frontier reaches it exactly when the page is fully
+      // scrolled (footer-bottom = page end): the dot lands at the frontier with no
+      // leftover pre-path. Uses footer geometry (stable - not affected by this element,
+      // unlike scrollHeight which this tall element would inflate in a measure loop).
+      const footerBottom = footer.getBoundingClientRect().bottom + window.scrollY;
+      const lineBottom = footerBottom - vh * (1 - FRONTIER);
+      const lineHeight = Math.max(200, lineBottom - lineTop);
+
+      const d = buildPath(W, lineHeight);
+      track.setAttribute('d', d);
+      draw.setAttribute('d', d);
+      dot.style.offsetPath = `path("${d}")`;
+      svg.setAttribute('viewBox', `0 0 ${W} ${lineHeight}`);
+
+      // Anchor the element to the page (scrolls with content).
+      wrap.style.top = `${Math.round(lineTop)}px`;
+      wrap.style.height = `${Math.round(lineHeight)}px`;
+
+      // Draw frontier sits FRONTIER down the viewport (where the cursor marked):
+      // solid above it, unfilled below. 0% drawn when About's top hits that line,
+      // 100% when the footer does.
+      const front = vh * FRONTIER;
+      wrap.style.setProperty('--sp-start', `${Math.round(Math.max(0, lineTop - front))}px`);
+      wrap.style.setProperty('--sp-end', `${Math.round(lineBottom - front)}px`);
     };
-    setRange();
-    window.addEventListener('resize', setRange);
-    window.addEventListener('load', setRange);
-    const t = window.setTimeout(setRange, 600); // re-measure after late layout (fonts/images)
+
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('load', measure);
+    const t = window.setTimeout(measure, 600); // re-measure after late layout (fonts/images)
 
     return () => {
       cancelAnimationFrame(raf);
-      window.removeEventListener('resize', setRange);
-      window.removeEventListener('load', setRange);
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('load', measure);
       clearTimeout(t);
     };
   }, []);
 
   const accent = isDark ? '#8ea2ff' : '#4f46e5';
-  const track = isDark ? 'rgba(142,162,255,0.16)' : 'rgba(79,70,229,0.13)';
+  const track = isDark ? 'rgba(142,162,255,0.20)' : 'rgba(79,70,229,0.16)';
 
   return (
     <div
@@ -59,22 +105,21 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       aria-hidden
       className="scroll-path hidden lg:block"
       style={{
-        position: 'fixed',
+        position: 'absolute',
         right: 'clamp(0.6rem, 1.6vw, 1.9rem)',
-        top: 'clamp(7rem, 13vh, 9rem)',        // clears the theme toggle bar (top-right)
-        bottom: 'clamp(7.5rem, 14vh, 9.5rem)', // clears the back-to-top rocket (bottom-right)
-        width: 78,
-        zIndex: 30,
+        width: W,
+        zIndex: 2,
         pointerEvents: 'none',
       }}
     >
-      <svg width="100%" height="100%" viewBox="0 0 100 1000" fill="none" preserveAspectRatio="xMidYMid meet">
-        {/* faint full track - shows the complex shape */}
-        <path d={PATH_D} stroke={track} strokeWidth={6} strokeLinecap="round" />
-        {/* thick drawn portion - revealed by the scroll-driven dashoffset */}
-        <path className="scroll-path__draw" d={PATH_D} stroke={accent} strokeWidth={8} strokeLinecap="round" />
-        {/* glowing, pulsing dot - rides the path via offset-path + scroll-driven offset-distance */}
-        <circle ref={dotRef} className="scroll-path__dot" r={7} cx={0} cy={0} fill={accent} style={{ filter: `drop-shadow(0 0 7px ${accent})` }} />
+      {/* overflow visible so the dot + its glow never get clipped at the path ends */}
+      <svg ref={svgRef} width="100%" height="100%" fill="none" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
+        {/* faint full pre-path - shows the route the line travels along */}
+        <path ref={trackRef} d="" stroke={track} strokeWidth={4} strokeLinecap="round" />
+        {/* solid drawn portion - revealed down to the frontier as you scroll */}
+        <path ref={drawRef} className="scroll-path__draw" d="" pathLength={100} stroke={accent} strokeWidth={5} strokeLinecap="round" />
+        {/* glowing, pulsing dot at the drawing frontier */}
+        <circle ref={dotRef} className="scroll-path__dot" r={6} cx={0} cy={0} fill={accent} style={{ filter: `drop-shadow(0 0 6px ${accent})` }} />
       </svg>
     </div>
   );

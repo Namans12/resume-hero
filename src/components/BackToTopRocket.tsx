@@ -110,8 +110,8 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
       onClick={launch}
       className="fixed z-50 flex items-center justify-center transition-transform duration-150 hover:-translate-y-0.5 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       style={{
-        right: 'clamp(1rem, 3vw, 2.5rem)',
-        bottom: 'clamp(1rem, 3vw, 2.5rem)',
+        right: 'clamp(1rem, 1vw, 1rem)',
+        bottom: 'clamp(1rem, 1vw, 1rem)',
         width: 54,
         height: 54,
         background: 'transparent',

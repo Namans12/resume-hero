@@ -67,9 +67,9 @@ function App() {
         <Suspense fallback={null}>
           <PortfolioSection isDark={isDark} />
         </Suspense>
+        <ScrollPath isDark={isDark} />
       </div>
       <BackToTopRocket isDark={isDark} />
-      <ScrollPath isDark={isDark} />
       <CustomCursor />
     </>
   );
