@@ -29,6 +29,11 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    // The hero→stars hand-off crossfades two semi-transparent layers (wrapper
+    // background out, StarBackground in), so mid-scroll neither fully covers
+    // the page canvas. The body must match the theme or the browser-default
+    // white bleeds through as a pale wash during the transition.
+    document.body.style.backgroundColor = isDark ? '#0b0b0f' : '#ffffff';
   }, [isDark]);
 
   useEffect(() => {
