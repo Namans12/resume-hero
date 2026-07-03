@@ -5,15 +5,17 @@ import StarBackground from './components/StarBackground';
 import ThemeToggleBar from './components/ThemeToggleBar';
 import BackToTopRocket from './components/BackToTopRocket';
 import CustomCursor from './components/CustomCursor';
-import ScrollPath from './components/ScrollPath';
-
 // Below-the-fold; code-split so GSAP + the portfolio load after the hero paints.
 const PortfolioSection = lazy(() => import('./components/PortfolioSection'));
+// Also code-split: it carries the two embedded artworks (~30KB of path data)
+// and only becomes visible from the About section down.
+const ScrollPath = lazy(() => import('./components/ScrollPath'));
 
 function App() {
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('theme');
-    return saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    // Default to dark mode; only honor a returning visitor's explicit choice.
+    return saved ? saved === 'dark' : true;
   });
 
   const [heroActive, setHeroActive] = useState(true);
@@ -67,7 +69,9 @@ function App() {
         <Suspense fallback={null}>
           <PortfolioSection isDark={isDark} />
         </Suspense>
-        <ScrollPath isDark={isDark} />
+        <Suspense fallback={null}>
+          <ScrollPath isDark={isDark} />
+        </Suspense>
       </div>
       <BackToTopRocket isDark={isDark} />
       <CustomCursor />

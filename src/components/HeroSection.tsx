@@ -45,21 +45,34 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
   // Shared position for the play/stop control - open dotted area, right of the head.
   const watchBtnPos: React.CSSProperties = { left: '10%', top: '30%' };
   const [playing, setPlaying] = useState(false);
+  // The clip loads with preload="none", so on click it has no decoded frame yet.
+  // We keep the static desk on screen until `videoReady` (the video's first frame
+  // is actually painting) and only then swap - the two show the same scene, so the
+  // hand-off is invisible instead of flashing an empty/black video box.
+  const [videoReady, setVideoReady] = useState(false);
+  // Start fetching the clip on hover so the first frame is usually ready by click.
+  const [warm, setWarm] = useState(false);
   const [hovered, setHovered] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  const warmVideo = () => {
+    setWarm(true);
+    // Kick off buffering now; harmless if already loading.
+    videoRef.current?.load();
+  };
   const startVideo = () => {
     setPlaying(true);
     setHovered(false);
   };
   const stopVideo = () => {
     setPlaying(false);
+    setVideoReady(false);
     const v = videoRef.current;
     if (v) { v.pause(); v.currentTime = 0; }
   };
 
   useEffect(() => {
-    if (playing) videoRef.current?.play().catch(() => {});
+    if (playing) videoRef.current?.play().catch(() => setPlaying(false));
   }, [playing]);
 
   // Stop the clip as soon as the visitor scrolls away from the hero - a playing
@@ -103,7 +116,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         draggable={false}
         className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
-          opacity: dayActive && !playing ? fade : 0,
+          opacity: dayActive && !videoReady ? fade : 0,
           zIndex: dayActive ? 1 : 2,
           transition: dayActive ? 'none' : 'opacity 0.65s ease',
         }}
@@ -114,7 +127,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         draggable={false}
         className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
-          opacity: nightActive && !playing ? fade : 0,
+          opacity: nightActive && !videoReady ? fade : 0,
           zIndex: nightActive ? 1 : 2,
           transition: nightActive ? 'none' : 'opacity 0.65s ease',
         }}
@@ -126,16 +139,21 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         src={avatarVideo}
         playsInline
         muted
-        preload="none"
+        // Warmed to "auto" on hover so the first frame is usually decoded by click.
+        preload={warm ? 'auto' : 'none'}
+        poster={heroNight}
         draggable={false}
+        // Reveal only once real frames are flowing - avoids the empty-video flash.
+        onPlaying={() => setVideoReady(true)}
         onEnded={stopVideo}
+        onError={stopVideo}
         className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
-          opacity: playing ? fade : 0,
+          opacity: videoReady ? fade : 0,
           zIndex: 3,
-          // Instant swap with the static image (hidden while playing) so the two
-          // avatar layers never overlap; own GPU layer so the moving clip
-          // composites cleanly while the page scrolls.
+          // Held hidden until the first frame paints, then snapped in over the
+          // matching static desk so the two avatar layers never overlap; own GPU
+          // layer so the moving clip composites cleanly while the page scrolls.
           transition: 'none',
           transform: 'translateZ(0)',
           backfaceVisibility: 'hidden',
@@ -207,8 +225,9 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
           type="button"
           aria-label="Watch Me Build & Solve"
           onClick={startVideo}
-          onMouseEnter={() => setHovered(true)}
+          onMouseEnter={() => { setHovered(true); warmVideo(); }}
           onMouseLeave={() => setHovered(false)}
+          onFocus={warmVideo}
           className="absolute z-10
             flex items-center justify-center w-9 h-9
             transition-transform duration-300 hover:scale-110

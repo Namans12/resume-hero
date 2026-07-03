@@ -52,7 +52,10 @@ const StarBackground: React.FC<StarBackgroundProps> = ({ opacity, isDark }) => {
 
   // Night vs day: base gradient + particle layers swap together
   const background = isDark
-    ? 'radial-gradient(ellipse at bottom, #1B2735 0%, #090A0F 100%)'
+    // Keep the sky near the hero's #0b0b0f black so scrolling out of the hero
+    // doesn't reveal a lighter slate "glare"; the faint lift only gives the
+    // stars a touch of depth to sit on.
+    ? 'radial-gradient(ellipse at bottom, #12141b 0%, #090A0F 100%)'
     : 'linear-gradient(to bottom, #E8F4F8 0%, #F0F8FF 40%, #FAFCFF 70%, #FFFFFF 100%)';
 
   const layers = isDark
