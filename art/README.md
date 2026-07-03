@@ -3,9 +3,11 @@
 These are the user's licensed Vecteezy drawings, used pixel-faithfully by the
 scroll line (`src/components/ScrollPath.tsx`): each artwork's black line-art
 path is exported into the generated `sketchPaths.ts` by
-`scripts/generate-sketch-paths.mjs` and revealed by a wipe that rides the
-same drawing frontier as the line, while the line itself threads through the
-composition.
+`scripts/generate-sketch-paths.mjs` and revealed by a mask stroke that rides
+the pen's own trace through that artwork - a generated centerline (the
+pipeline in `scripts/centerline/`), not a hand-measured ride - so the ink
+finishes each stroke exactly as the dot passes it, while the line itself
+threads through the composition.
 
 - `about-face.svg` — abstract female face (Vecteezy 33517281). Beside the
   About section; the line threads down its right side and rides the neck
