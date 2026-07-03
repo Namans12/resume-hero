@@ -133,6 +133,7 @@ const wander = (from: Pt, to: Pt, waveX: number, phase: number) => {
 };
 
 interface Station {
+  id: string;
   d: string;
   entry: Pt;
   exit: Pt;
@@ -140,6 +141,8 @@ interface Station {
   s: number;
   dx: number;
   dy: number;
+  /** mask-stroke width (canvas units) for this station's ink reveal */
+  maskW: number;
   /** optional tangent-aligned approach point: the connector flows through it
       straight into the entry (used by the hands artwork, whose cuff wants
       the line to arrive along the arm's own outward direction) */
@@ -153,6 +156,7 @@ const buildPath = (h: number, waveX: number, stations: Station[], endsOnLast: bo
   let d = `M ${n1(waveX)} 0`;
   let cur: Pt = { x: waveX, y: 0 };
   let phase = 0;
+  const spans: Array<{ id: string; from: number; to: number }> = [];
   for (const st of stations) {
     // wander down the wave, then swing in above the drawing's entry point —
     // or, when the station asks for it, sweep straight through its tangent
@@ -163,17 +167,19 @@ const buildPath = (h: number, waveX: number, stations: Station[], endsOnLast: bo
       ? [...wander(cur, { x: waveX, y: waveTo }, waveX, phase), pre, st.entry]
       : [cur, pre, st.entry];
     d += flowThrough(pts);
+    const from = d.length;
     // WELD the motif into the same subpath: its d starts with an M to the
     // pen's current position, and a mid-path M (a new subpath) makes Blink
     // lay the dash out on a different parameterization than offset-distance
     // uses - the ink visibly runs ~2-3% of the path AHEAD of the dot. An L
     // to the same point is a zero-length no-op that keeps one subpath.
     d += ` ${st.d.replace(/^M\b/, 'L')}`;
+    spans.push({ id: st.id, from, to: d.length });
     cur = st.exit;
     phase++;
   }
   if (!endsOnLast) d += flowThrough(wander(cur, { x: waveX, y: h }, waveX, phase));
-  return d;
+  return { d, spans };
 };
 
 /* The one-line drawings pack a LOT of path length into a narrow vertical band,
@@ -227,19 +233,16 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   const drawRef = useRef<SVGPathElement>(null);
   const dotRef = useRef<SVGCircleElement>(null);
   const artRef = useRef<SVGGElement>(null);
-  const artClipRef = useRef<SVGRectElement>(null);
   const art2Ref = useRef<SVGGElement>(null);
-  const art2ClipRef = useRef<SVGRectElement>(null);
   const art3Ref = useRef<SVGGElement>(null);
-  const art3ClipRef = useRef<SVGRectElement>(null);
   const art4Ref = useRef<SVGGElement>(null);
-  const art4ClipRef = useRef<SVGRectElement>(null);
   const art5Ref = useRef<SVGGElement>(null);
-  const art5ClipRef = useRef<SVGRectElement>(null);
   const art6Ref = useRef<SVGGElement>(null);
-  const art6ClipRef = useRef<SVGRectElement>(null);
   const art7Ref = useRef<SVGGElement>(null);
-  const art7ClipRef = useRef<SVGRectElement>(null);
+  const maskPathRefs = useRef<Record<string, SVGPathElement | null>>({});
+  // char-index spans of each station's welded trace within `d` (canvas-path
+  // coords into the global route) — consumed by the Task 10 stop-remapper.
+  const spansRef = useRef<Array<{ id: string; from: number; to: number }>>([]);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -289,6 +292,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       const gapRight = waveX - LINE_GAP;
       const stations: Station[] = [];
       const place = (
+        id: SketchId,
         def: (typeof SKETCHES)[SketchId],
         centerDocY: number,
         gapLeftDoc: number,
@@ -311,10 +315,12 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           lineHeight - bh * s - 24,
         );
         return {
+          id,
           d: transformPath(def.d, s, dx, dy),
           entry: { x: def.entry[0] * s + dx, y: def.entry[1] * s + dy },
           exit: { x: def.exit[0] * s + dx, y: def.exit[1] * s + dy },
           s, dx, dy,
+          maskW: def.maskW * s,
         };
       };
 
@@ -345,7 +351,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         // shows in the gap beside the project cards (user ask, 2026-07-02);
         // the trophy and award badge match that cap for the same clearance
         const st = place(
-          SKETCHES[id], centerDoc, headRect.right + HEAD_GAP,
+          id, SKETCHES[id], centerDoc, headRect.right + HEAD_GAP,
           id === 'projects' ? { maxW: 260, nudgeX: 24 }
             : id === 'achievements' || id === 'certifications' ? { maxW: 260 }
               : undefined,
@@ -423,7 +429,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           if (off1 > 0 && k * off1 > room) k = Math.max(0.26, room / off1);
           handsM = buildM(k);
 
-          const entry = apply(handsM, ex, ey);
+          const entry = apply(handsM, HANDS_ART.threadEntry[0], HANDS_ART.threadEntry[1]);
           const exit = apply(handsM, HANDS_ART.threadExit[0], HANDS_ART.threadExit[1]);
           // approach along the arm's outward extension (book → cuff, continued)
           const bookP = apply(handsM, ax, ay);
@@ -433,8 +439,10 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             y: entry.y + ((entry.y - bookP.y) / dirLen) * 90,
           };
           stations.push({
+            id: 'hands',
             d: transformPathAffine(HANDS_ART.thread, handsM),
             entry, exit, s: k, dx: 0, dy: 0, pre,
+            maskW: HANDS_ART.maskW * k,
           });
           // the artwork's page extent decides how far the canvas must reach
           const corners = [
@@ -448,7 +456,8 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       }
       const lineEnd = Math.max(200, endLocalY);
 
-      const d = buildPath(lineEnd, waveX, stations, !!handsM);
+      const { d, spans } = buildPath(lineEnd, waveX, stations, !!handsM);
+      spansRef.current = spans;
       // Everything below only costs time when the geometry actually changed —
       // the d string encodes all of it, so it doubles as the change signature.
       const sig = `${cw}|${d}`;
@@ -470,24 +479,6 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         staticStyle.id = 'scroll-path-static';
         document.head.appendChild(staticStyle);
       }
-      staticStyle.textContent =
-        '@keyframes spArtWipe { from { height: 0px; } to { height: 1920px; } }\n' +
-        // page-space wipe for the flipped/tilted hands artwork (span varies)
-        `@keyframes spArtWipe2 { from { height: 0px; } to { height: ${
-          handsArtSpan ? Math.round(handsArtSpan.bottom - handsArtSpan.top + 8) : 0
-        }px; } }\n` +
-        // page-space wipe for the rotated gears artwork (span varies)
-        `@keyframes spArtWipe3 { from { height: 0px; } to { height: ${
-          skillsStation ? Math.round(SKETCHES.skills.vb[1] * skillsStation.s + 8) : 0
-        }px; } }\n` +
-        // art-space wipe for the upright rocket artwork (constant art height)
-        '@keyframes spArtWipe4 { from { height: 0px; } to { height: 1850px; } }\n' +
-        // art-space wipe for the upright trophy artwork (constant art height)
-        '@keyframes spArtWipe5 { from { height: 0px; } to { height: 716px; } }\n' +
-        // art-space wipe for the upright award badge (constant art height)
-        '@keyframes spArtWipe6 { from { height: 0px; } to { height: 1128px; } }\n' +
-        // art-space wipe for the upright growth chart (constant art height)
-        '@keyframes spArtWipe7 { from { height: 0px; } to { height: 1128px; } }';
 
       // Piecewise-remapped keyframes keep the pen ON the frontier even though
       // the drawings pack length unevenly (see remapStops). Sampling the path
@@ -531,197 +522,68 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       wrap.style.setProperty('--sp-start', `${Math.round(Math.max(0, lineTop - front))}px`);
       wrap.style.setProperty('--sp-end', `${Math.round(Math.min(lineTop + lineEnd - front, maxScroll))}px`);
 
-      // The About artwork: position the user's drawing at its station and wipe
-      // it in over exactly the scroll span the frontier takes to cross it —
-      // the pen threads past while the real artwork paints on beside it.
-      const artG = artRef.current;
-      const artRect = artClipRef.current;
-      if (artG && artRect) {
-        if (aboutStation) {
-          const { s, dx, dy } = aboutStation;
-          artG.style.display = '';
-          artG.setAttribute(
-            'transform',
-            `translate(${n1(dx)} ${n1(dy)}) scale(${(s * ABOUT_ART.scale).toFixed(6)}) ` +
-            `translate(${-ABOUT_ART.offset[0]} ${-ABOUT_ART.offset[1]})`,
-          );
-          const artTop = lineTop + dy;
-          const artH = SKETCHES.about.vb[1] * s;
-          wrap.style.setProperty('--fw-start', `${Math.round(Math.max(0, artTop - front))}px`);
-          wrap.style.setProperty('--fw-end', `${Math.round(artTop + artH - front)}px`);
-          artRect.style.animation = 'spArtWipe linear both';
-          artRect.style.setProperty('animation-timeline', 'scroll(root block)');
-          artRect.style.setProperty('animation-range-start', 'var(--fw-start)');
-          artRect.style.setProperty('animation-range-end', 'var(--fw-end)');
-        } else {
-          artG.style.display = 'none';
-        }
+      if (aboutStation) artRef.current?.setAttribute('transform',
+        `translate(${n1(aboutStation.dx)} ${n1(aboutStation.dy)}) scale(${(aboutStation.s * ABOUT_ART.scale).toFixed(6)}) ` +
+        `translate(${-ABOUT_ART.offset[0]} ${-ABOUT_ART.offset[1]})`);
+      if (skillsStation) {
+        const tf = `translate(${n1(skillsStation.dx)} ${n1(skillsStation.dy)}) scale(${skillsStation.s.toFixed(5)}) ` +
+          `matrix(${SKILLS_ART.rot.join(' ')})`;
+        art3Ref.current?.querySelectorAll('[data-skills-t]').forEach(el => el.setAttribute('transform', tf));
+      }
+      if (experienceStation) art7Ref.current?.setAttribute('transform',
+        `translate(${n1(experienceStation.dx)} ${n1(experienceStation.dy)}) scale(${(experienceStation.s * EXPERIENCE_ART.scale).toFixed(6)}) ` +
+        `translate(${-EXPERIENCE_ART.offset[0]} ${-EXPERIENCE_ART.offset[1]})`);
+      if (projectsStation) art4Ref.current?.setAttribute('transform',
+        `translate(${n1(projectsStation.dx)} ${n1(projectsStation.dy)}) scale(${(projectsStation.s * PROJECTS_ART.scale).toFixed(6)}) ` +
+        `translate(${-PROJECTS_ART.offset[0]} ${-PROJECTS_ART.offset[1]})`);
+      if (achievementsStation) art5Ref.current?.setAttribute('transform',
+        `translate(${n1(achievementsStation.dx)} ${n1(achievementsStation.dy)}) scale(${(achievementsStation.s * ACHIEVEMENTS_ART.scale).toFixed(6)}) ` +
+        `translate(${-ACHIEVEMENTS_ART.offset[0]} ${-ACHIEVEMENTS_ART.offset[1]})`);
+      if (certificationsStation) art6Ref.current?.setAttribute('transform',
+        `translate(${n1(certificationsStation.dx)} ${n1(certificationsStation.dy)}) scale(${(certificationsStation.s * CERTIFICATIONS_ART.scale).toFixed(6)}) ` +
+        `translate(${-CERTIFICATIONS_ART.offset[0]} ${-CERTIFICATIONS_ART.offset[1]})`);
+      if (handsM) {
+        const m = handsM;
+        const matrixStr = `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].map(v => v.toFixed(5)).join(' ')})`;
+        art2Ref.current?.querySelectorAll('[data-hands-t]').forEach(el => el.setAttribute('transform', matrixStr));
       }
 
-      // The Skills gears artwork: rotated 90° CCW (its flowing line runs
-      // top→bottom) at the skills station, wiped in page-space while the
-      // frontier crosses it; the pen rides the measured line through it.
-      const art3G = art3Ref.current;
-      const art3Rect = art3ClipRef.current;
-      if (art3G && art3Rect) {
-        if (skillsStation) {
-          const { s, dx, dy } = skillsStation;
-          art3G.style.display = '';
-          const r = SKILLS_ART.rot;
-          const tf = `translate(${n1(dx)} ${n1(dy)}) scale(${s.toFixed(5)}) ` +
-            `matrix(${r.join(' ')})`;
-          art3G.querySelectorAll('[data-skills-t]').forEach(g => g.setAttribute('transform', tf));
-          const artTop = lineTop + dy;
-          const artH = SKETCHES.skills.vb[1] * s;
-          art3Rect.setAttribute('y', String(Math.round(dy - 4)));
-          wrap.style.setProperty('--fw3-start', `${Math.round(Math.max(0, artTop - front))}px`);
-          wrap.style.setProperty('--fw3-end', `${Math.round(Math.min(artTop + artH - front, maxScroll))}px`);
-          art3Rect.style.animation = 'spArtWipe3 linear both';
-          art3Rect.style.setProperty('animation-timeline', 'scroll(root block)');
-          art3Rect.style.setProperty('animation-range-start', 'var(--fw3-start)');
-          art3Rect.style.setProperty('animation-range-end', 'var(--fw3-end)');
-        } else {
-          art3G.style.display = 'none';
-        }
+      // Pen-synced ink reveals: each artwork's accent ink sits under a mask whose
+      // content is a wide white stroke of that artwork's own trace (the same
+      // geometry welded into the global line). Fallback keyframes are LINEAR in
+      // the frontier's travel (entryY → lowest point); the idle remap below
+      // replaces them with stop-exact ones derived from the global path.
+      const artGroups: Record<string, SVGGElement | null> = {
+        about: artRef.current, skills: art3Ref.current, experience: art7Ref.current,
+        projects: art4Ref.current, achievements: art5Ref.current,
+        certifications: art6Ref.current, hands: art2Ref.current,
+      };
+      let revealKf = '';
+      const placed = new Map(stations.map(st => [st.id, st]));
+      for (const id of Object.keys(artGroups)) {
+        const g = artGroups[id];
+        const mp = maskPathRefs.current[id];
+        const st = placed.get(id);
+        if (!g || !mp) continue;
+        if (!st) { g.style.display = 'none'; continue; }
+        g.style.display = '';
+        mp.setAttribute('d', st.d);
+        mp.style.strokeWidth = `${Math.max(6, st.maskW)}`;
+        const lowest = id === 'hands' && handsArtSpan
+          ? handsArtSpan.bottom
+          : st.dy + SKETCHES[id as SketchId].vb[1] * st.s;
+        const pIn = Math.max(0, Math.min(100, (st.entry.y / lineEnd) * 100));
+        const pOut = Math.max(pIn + 0.1, Math.min(100, (lowest / lineEnd) * 100));
+        revealKf += `@keyframes spReveal_${id} { 0% { stroke-dashoffset: 100; } ` +
+          `${pIn.toFixed(2)}% { stroke-dashoffset: 100; } ` +
+          `${pOut.toFixed(2)}% { stroke-dashoffset: 0; } ` +
+          `100% { stroke-dashoffset: 0; } }\n`;
+        mp.style.animation = `spReveal_${id} linear both`;
+        mp.style.setProperty('animation-timeline', 'scroll(root block)');
+        mp.style.setProperty('animation-range-start', 'var(--sp-start)');
+        mp.style.setProperty('animation-range-end', 'var(--sp-end)');
       }
-
-      // The Projects rocket artwork: upright at its station (its exhaust
-      // trail already runs down the page - no rotation), so an art-space
-      // wipe rect stays frontier-faithful; the pen rides the measured
-      // nose → hull → flame → trail line while the drawing paints in.
-      const art4G = art4Ref.current;
-      const art4Rect = art4ClipRef.current;
-      if (art4G && art4Rect) {
-        if (projectsStation) {
-          const { s, dx, dy } = projectsStation;
-          art4G.style.display = '';
-          art4G.setAttribute(
-            'transform',
-            `translate(${n1(dx)} ${n1(dy)}) scale(${(s * PROJECTS_ART.scale).toFixed(6)}) ` +
-            `translate(${-PROJECTS_ART.offset[0]} ${-PROJECTS_ART.offset[1]})`,
-          );
-          const artTop = lineTop + dy;
-          const artH = SKETCHES.projects.vb[1] * s;
-          wrap.style.setProperty('--fw4-start', `${Math.round(Math.max(0, artTop - front))}px`);
-          wrap.style.setProperty('--fw4-end', `${Math.round(Math.min(artTop + artH - front, maxScroll))}px`);
-          art4Rect.style.animation = 'spArtWipe4 linear both';
-          art4Rect.style.setProperty('animation-timeline', 'scroll(root block)');
-          art4Rect.style.setProperty('animation-range-start', 'var(--fw4-start)');
-          art4Rect.style.setProperty('animation-range-end', 'var(--fw4-end)');
-        } else {
-          art4G.style.display = 'none';
-        }
-      }
-
-      // The Achievements trophy artwork: upright at its station, cropped to
-      // the pedestal's neighbourhood (the source's ground line spans the full
-      // canvas), art-space wipe riding the frontier while the pen rides the
-      // measured handle → wall → stem → pedestal → ground-line silhouette.
-      const art5G = art5Ref.current;
-      const art5Rect = art5ClipRef.current;
-      if (art5G && art5Rect) {
-        if (achievementsStation) {
-          const { s, dx, dy } = achievementsStation;
-          art5G.style.display = '';
-          art5G.setAttribute(
-            'transform',
-            `translate(${n1(dx)} ${n1(dy)}) scale(${(s * ACHIEVEMENTS_ART.scale).toFixed(6)}) ` +
-            `translate(${-ACHIEVEMENTS_ART.offset[0]} ${-ACHIEVEMENTS_ART.offset[1]})`,
-          );
-          const artTop = lineTop + dy;
-          const artH = SKETCHES.achievements.vb[1] * s;
-          wrap.style.setProperty('--fw5-start', `${Math.round(Math.max(0, artTop - front))}px`);
-          wrap.style.setProperty('--fw5-end', `${Math.round(Math.min(artTop + artH - front, maxScroll))}px`);
-          art5Rect.style.animation = 'spArtWipe5 linear both';
-          art5Rect.style.setProperty('animation-timeline', 'scroll(root block)');
-          art5Rect.style.setProperty('animation-range-start', 'var(--fw5-start)');
-          art5Rect.style.setProperty('animation-range-end', 'var(--fw5-end)');
-        } else {
-          art5G.style.display = 'none';
-        }
-      }
-
-      // The Certifications award artwork: upright at its station, cropped so
-      // the source's full-width baseline becomes short grounding stubs, with
-      // an art-space wipe riding the frontier; the pen rides the measured
-      // scallop → bump apex → baseline pinch → right-ribbon silhouette.
-      const art6G = art6Ref.current;
-      const art6Rect = art6ClipRef.current;
-      if (art6G && art6Rect) {
-        if (certificationsStation) {
-          const { s, dx, dy } = certificationsStation;
-          art6G.style.display = '';
-          art6G.setAttribute(
-            'transform',
-            `translate(${n1(dx)} ${n1(dy)}) scale(${(s * CERTIFICATIONS_ART.scale).toFixed(6)}) ` +
-            `translate(${-CERTIFICATIONS_ART.offset[0]} ${-CERTIFICATIONS_ART.offset[1]})`,
-          );
-          const artTop = lineTop + dy;
-          const artH = SKETCHES.certifications.vb[1] * s;
-          wrap.style.setProperty('--fw6-start', `${Math.round(Math.max(0, artTop - front))}px`);
-          wrap.style.setProperty('--fw6-end', `${Math.round(Math.min(artTop + artH - front, maxScroll))}px`);
-          art6Rect.style.animation = 'spArtWipe6 linear both';
-          art6Rect.style.setProperty('animation-timeline', 'scroll(root block)');
-          art6Rect.style.setProperty('animation-range-start', 'var(--fw6-start)');
-          art6Rect.style.setProperty('animation-range-end', 'var(--fw6-end)');
-        } else {
-          art6G.style.display = 'none';
-        }
-      }
-
-      // The Experience growth-chart artwork: upright at its station, cropped
-      // so the source's full-width baseline becomes grounding stubs, with an
-      // art-space wipe riding the frontier; the pen rides the measured
-      // arrowhead → shaft → tallest-bar edge → baseline route.
-      const art7G = art7Ref.current;
-      const art7Rect = art7ClipRef.current;
-      if (art7G && art7Rect) {
-        if (experienceStation) {
-          const { s, dx, dy } = experienceStation;
-          art7G.style.display = '';
-          art7G.setAttribute(
-            'transform',
-            `translate(${n1(dx)} ${n1(dy)}) scale(${(s * EXPERIENCE_ART.scale).toFixed(6)}) ` +
-            `translate(${-EXPERIENCE_ART.offset[0]} ${-EXPERIENCE_ART.offset[1]})`,
-          );
-          const artTop = lineTop + dy;
-          const artH = SKETCHES.experience.vb[1] * s;
-          wrap.style.setProperty('--fw7-start', `${Math.round(Math.max(0, artTop - front))}px`);
-          wrap.style.setProperty('--fw7-end', `${Math.round(Math.min(artTop + artH - front, maxScroll))}px`);
-          art7Rect.style.animation = 'spArtWipe7 linear both';
-          art7Rect.style.setProperty('animation-timeline', 'scroll(root block)');
-          art7Rect.style.setProperty('animation-range-start', 'var(--fw7-start)');
-          art7Rect.style.setProperty('animation-range-end', 'var(--fw7-end)');
-        } else {
-          art7G.style.display = 'none';
-        }
-      }
-
-      // The hands+book artwork: flipped + tilted via the solved matrix, and
-      // wiped in while the frontier crosses its page extent. The pen's thread
-      // rides the reaching arm and the whole line ENDS on its trailing stroke.
-      const art2G = art2Ref.current;
-      const art2Rect = art2ClipRef.current;
-      if (art2G && art2Rect) {
-        if (handsM && handsArtSpan) {
-          const m = handsM;
-          const matrixStr =
-            `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].map(v => v.toFixed(5)).join(' ')})`;
-          art2G.style.display = '';
-          art2G.querySelectorAll('[data-hands-t]').forEach(g => g.setAttribute('transform', matrixStr));
-          // page-space wipe: the clip rect lives OUTSIDE the transform so the
-          // reveal sweeps horizontally, exactly tracking the frontier
-          art2Rect.setAttribute('y', String(Math.round(handsArtSpan.top - 4)));
-          wrap.style.setProperty('--fw2-start', `${Math.round(Math.max(0, lineTop + handsArtSpan.top - front))}px`);
-          wrap.style.setProperty('--fw2-end', `${Math.round(Math.min(lineTop + handsArtSpan.bottom - front, maxScroll))}px`);
-          art2Rect.style.animation = 'spArtWipe2 linear both';
-          art2Rect.style.setProperty('animation-timeline', 'scroll(root block)');
-          art2Rect.style.setProperty('animation-range-start', 'var(--fw2-start)');
-          art2Rect.style.setProperty('animation-range-end', 'var(--fw2-end)');
-        } else {
-          art2G.style.display = 'none';
-        }
-      }
+      staticStyle.textContent = revealKf;
     };
 
     measure();
@@ -768,12 +630,21 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           {/* ghost slightly dimmed so it can't stack with the line's track
               into something that reads as already-drawn */}
           <path d={ABOUT_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-          <g clipPath="url(#sp-about-art-wipe)">
+          <g mask="url(#sp-about-reveal)">
             <path d={ABOUT_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
           </g>
-          <clipPath id="sp-about-art-wipe" clipPathUnits="userSpaceOnUse">
-            <rect ref={artClipRef} x={395} y={960} width={1600} height={0} />
-          </clipPath>
+          <mask id="sp-about-reveal" maskUnits="userSpaceOnUse">
+            <path
+              ref={el => { maskPathRefs.current.about = el; }}
+              pathLength={100}
+              fill="none"
+              stroke="#fff"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={100}
+              strokeDashoffset={100}
+            />
+          </mask>
         </g>
         {/* The Skills gears artwork - rotated 90° CCW beside the Skills
             section; ghost + a page-space wipe riding the frontier while the
@@ -782,14 +653,23 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           <g data-skills-t>
             <path d={SKILLS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
           </g>
-          <g clipPath="url(#sp-skills-art-wipe)">
+          <g mask="url(#sp-skills-reveal)">
             <g data-skills-t>
               <path d={SKILLS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
             </g>
           </g>
-          <clipPath id="sp-skills-art-wipe" clipPathUnits="userSpaceOnUse">
-            <rect ref={art3ClipRef} x={-4000} y={0} width={12000} height={0} />
-          </clipPath>
+          <mask id="sp-skills-reveal" maskUnits="userSpaceOnUse">
+            <path
+              ref={el => { maskPathRefs.current.skills = el; }}
+              pathLength={100}
+              fill="none"
+              stroke="#fff"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={100}
+              strokeDashoffset={100}
+            />
+          </mask>
         </g>
         {/* The Projects rocket artwork - the user's licensed take-off drawing
             beside the Projects section; ghost + an art-space wipe (upright,
@@ -797,12 +677,21 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             measured line (positioned in measure()). */}
         <g ref={art4Ref} style={{ display: 'none' }}>
           <path d={PROJECTS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-          <g clipPath="url(#sp-projects-art-wipe)">
+          <g mask="url(#sp-projects-reveal)">
             <path d={PROJECTS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
           </g>
-          <clipPath id="sp-projects-art-wipe" clipPathUnits="userSpaceOnUse">
-            <rect ref={art4ClipRef} x={1580} y={994} width={680} height={0} />
-          </clipPath>
+          <mask id="sp-projects-reveal" maskUnits="userSpaceOnUse">
+            <path
+              ref={el => { maskPathRefs.current.projects = el; }}
+              pathLength={100}
+              fill="none"
+              stroke="#fff"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={100}
+              strokeDashoffset={100}
+            />
+          </mask>
         </g>
         {/* The Achievements trophy artwork - the user's licensed drawing
             beside the Achievements section, cropped (union of two art-space
@@ -812,7 +701,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         <g ref={art5Ref} style={{ display: 'none' }}>
           <g clipPath="url(#sp-achievements-art-crop)">
             <path d={ACHIEVEMENTS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-            <g clipPath="url(#sp-achievements-art-wipe)">
+            <g mask="url(#sp-achievements-reveal)">
               <path d={ACHIEVEMENTS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
             </g>
           </g>
@@ -821,9 +710,18 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
             ))}
           </clipPath>
-          <clipPath id="sp-achievements-art-wipe" clipPathUnits="userSpaceOnUse">
-            <rect ref={art5ClipRef} x={1640} y={508} width={830} height={0} />
-          </clipPath>
+          <mask id="sp-achievements-reveal" maskUnits="userSpaceOnUse">
+            <path
+              ref={el => { maskPathRefs.current.achievements = el; }}
+              pathLength={100}
+              fill="none"
+              stroke="#fff"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={100}
+              strokeDashoffset={100}
+            />
+          </mask>
         </g>
         {/* The Experience growth-chart artwork - the user's licensed drawing
             beside the Experience section, cropped (one art-space rect) so its
@@ -832,7 +730,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         <g ref={art7Ref} style={{ display: 'none' }}>
           <g clipPath="url(#sp-experience-art-crop)">
             <path d={EXPERIENCE_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-            <g clipPath="url(#sp-experience-art-wipe)">
+            <g mask="url(#sp-experience-reveal)">
               <path d={EXPERIENCE_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
             </g>
           </g>
@@ -841,9 +739,18 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
             ))}
           </clipPath>
-          <clipPath id="sp-experience-art-wipe" clipPathUnits="userSpaceOnUse">
-            <rect ref={art7ClipRef} x={1180} y={1356} width={1690} height={0} />
-          </clipPath>
+          <mask id="sp-experience-reveal" maskUnits="userSpaceOnUse">
+            <path
+              ref={el => { maskPathRefs.current.experience = el; }}
+              pathLength={100}
+              fill="none"
+              stroke="#fff"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={100}
+              strokeDashoffset={100}
+            />
+          </mask>
         </g>
         {/* The Certifications award artwork - the user's licensed rosette
             badge beside the Certifications section, cropped (one art-space
@@ -853,7 +760,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         <g ref={art6Ref} style={{ display: 'none' }}>
           <g clipPath="url(#sp-certifications-art-crop)">
             <path d={CERTIFICATIONS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-            <g clipPath="url(#sp-certifications-art-wipe)">
+            <g mask="url(#sp-certifications-reveal)">
               <path d={CERTIFICATIONS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
             </g>
           </g>
@@ -862,9 +769,18 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
             ))}
           </clipPath>
-          <clipPath id="sp-certifications-art-wipe" clipPathUnits="userSpaceOnUse">
-            <rect ref={art6ClipRef} x={1390} y={1356} width={960} height={0} />
-          </clipPath>
+          <mask id="sp-certifications-reveal" maskUnits="userSpaceOnUse">
+            <path
+              ref={el => { maskPathRefs.current.certifications = el; }}
+              pathLength={100}
+              fill="none"
+              stroke="#fff"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={100}
+              strokeDashoffset={100}
+            />
+          </mask>
         </g>
         {/* The hands+book artwork - flipped/tilted below Contact's location
             pill; ghost + a page-space wipe that rides the frontier. The page
@@ -873,14 +789,23 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           <g data-hands-t>
             <path d={HANDS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
           </g>
-          <g clipPath="url(#sp-hands-art-wipe)">
+          <g mask="url(#sp-hands-reveal)">
             <g data-hands-t>
               <path d={HANDS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
             </g>
           </g>
-          <clipPath id="sp-hands-art-wipe" clipPathUnits="userSpaceOnUse">
-            <rect ref={art2ClipRef} x={-4000} y={0} width={12000} height={0} />
-          </clipPath>
+          <mask id="sp-hands-reveal" maskUnits="userSpaceOnUse">
+            <path
+              ref={el => { maskPathRefs.current.hands = el; }}
+              pathLength={100}
+              fill="none"
+              stroke="#fff"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={100}
+              strokeDashoffset={100}
+            />
+          </mask>
         </g>
         {/* faint full pre-path - shows the route AND the drawings the line will make */}
         <path ref={trackRef} d="" stroke={track} strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
