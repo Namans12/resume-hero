@@ -21,7 +21,7 @@
 - Artwork ink reveal must never appear ahead of the dot; each diagram must be fully inked when the dot exits it.
 - Desktop only (`min-width: 1024px`), unchanged.
 - Vecteezy artworks stay pixel-faithful — the `*_ART` fill paths and their crop clipPaths are untouched.
-- Test command for pipeline modules: `node --test scripts/centerline/`.
+- Test command for pipeline modules: `node --test 'scripts/centerline/*.test.mjs'` (the bare-directory form `node --test scripts/centerline/` fails under this project's `"type": "module"` — Node's CJS loader intercepts the directory arg before the test runner's glob does; discovered during Task 3 review, 2026-07-03).
 - Commit after every task (frequent commits); commit messages end with `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`.
 
 ## File Structure
@@ -1536,7 +1536,7 @@ export function traceArtwork(spec) {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `node --test scripts/centerline/` (all module tests together)
+Run: `node --test 'scripts/centerline/*.test.mjs'` (all module tests together)
 Expected: PASS, all files. If `maskW` lands outside 2–5 in the first test, print `maxHalf` — a value near 6 (half of 12) is correct; adjust nothing else.
 
 - [ ] **Step 5: Commit**
@@ -1978,7 +1978,7 @@ Start the dev server (preview tools), viewport ≥1024px, and step-scroll the pa
 
 - [ ] **Step 5: Full test + lint sweep**
 
-Run: `node --test scripts/centerline/ && npm run lint && npm run build`
+Run: `node --test 'scripts/centerline/*.test.mjs' && npm run lint && npm run build`
 Expected: all pass.
 
 - [ ] **Step 6: Commit**
