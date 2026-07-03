@@ -213,7 +213,7 @@ const remapStops = (path: SVGPathElement, lineHeight: number, steps = 140) => {
     while (i < N && gate(i) <= targetY) i++;
     stops.push(i / N);
   }
-  const maxStep = 2.4 / steps; // ≤2.4x uniform pen speed per keyframe
+  const maxStep = 4.5 / steps; // ≤4.5x uniform pen speed per keyframe
   for (let k = 1; k <= steps; k++) {
     if (stops[k] > stops[k - 1] + maxStep) stops[k] = stops[k - 1] + maxStep;
   }
@@ -495,6 +495,29 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           drawKf += `${pct}% { stroke-dashoffset: ${(100 * (1 - stops[k])).toFixed(3)}; } `;
           dotKf += `${pct}% { offset-distance: ${(100 * stops[k]).toFixed(3)}%; } `;
         }
+        // Per-artwork reveal keyframes on the SAME stops: the trace segment IS a
+        // slice of the global path, so its local progress is exact arithmetic on
+        // the global length — the ink finishes each stroke as the dot passes it.
+        const L = draw.getTotalLength();
+        const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        let revealWoven = '';
+        const names: Record<string, string> = {};
+        for (const span of spans) {
+          tmp.setAttribute('d', d.slice(0, span.from));
+          const lenStart = tmp.getTotalLength();
+          tmp.setAttribute('d', d.slice(0, span.to));
+          const lenEnd = tmp.getTotalLength();
+          if (lenEnd - lenStart < 1) continue;
+          let kf = '';
+          for (let k = 0; k <= last; k++) {
+            const pct = ((k / last) * 100).toFixed(2);
+            const local = Math.min(1, Math.max(0, (stops[k] * L - lenStart) / (lenEnd - lenStart)));
+            kf += `${pct}% { stroke-dashoffset: ${(100 * (1 - local)).toFixed(3)}; } `;
+          }
+          const name = `spRevealWoven_${span.id}`;
+          revealWoven += `@keyframes ${name} { ${kf}}\n`;
+          names[span.id] = name;
+        }
         let styleEl = document.getElementById('scroll-path-remap') as HTMLStyleElement | null;
         if (!styleEl) {
           styleEl = document.createElement('style');
@@ -502,9 +525,13 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           document.head.appendChild(styleEl);
         }
         styleEl.textContent =
-          `@keyframes spDrawWoven { ${drawKf}}\n@keyframes spDotWoven { ${dotKf}}`;
+          `@keyframes spDrawWoven { ${drawKf}}\n@keyframes spDotWoven { ${dotKf}}\n${revealWoven}`;
         draw.style.animationName = 'spDrawWoven';
         dot.style.animationName = 'spDotWoven';
+        for (const [id, name] of Object.entries(names)) {
+          const mp = maskPathRefs.current[id];
+          if (mp) mp.style.animationName = name;
+        }
       });
 
       // Anchor the element to the page (scrolls with content).
