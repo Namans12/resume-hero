@@ -38,7 +38,7 @@ const fitPieceSafe = (pts, tol) => {
 };
 
 export function traceArtwork(spec) {
-  const { name, d, crops = null, entryHint, exitHint, toLocal, localScale, fitTol = 0.35 } = spec;
+  const { name, d, crops = null, entryHint, exitHint, toLocal, localScale, fitTol = 0.35, minDustLen } = spec;
   const polys = flattenPath(d, 0.5);
   const bmp = rasterize(polys, { crops });
   const dt = chamfer(bmp);
@@ -57,7 +57,14 @@ export function traceArtwork(spec) {
 
   let g = buildGraph(skel);
   g = pruneSpurs(g, Math.max(3, meanHalf * 1.6));
-  g = dropDust(g, Math.max(7, meanHalf * 2));
+  // Some auto-traced artworks contain small closed ink loops (an ellipse
+  // fringe, a shading fleck) that are genuinely disconnected from the main
+  // silhouette even with no crop applied — real ink, not noise, but too far
+  // from anything else to bridge with a subtle connector. minDustLen lets a
+  // caller raise the bar above the default ink-width-derived threshold to
+  // drop those specific components for one artwork, without affecting the
+  // formula everywhere else.
+  g = dropDust(g, Math.max(minDustLen ?? 7, meanHalf * 2));
   smoothChains(g, 2);
   if (!g.edges.length) throw new Error(`[${name}] graph empty after cleanup`);
 

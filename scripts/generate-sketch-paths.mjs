@@ -125,6 +125,15 @@ const ART_SPECS = {
     entryHint: [2110, 562], exitHint: [2440, 1191],
     toLocal: ([x, y]) => [(x - 1650) / 5, (y - 510) / 5],
     localScale: 1 / 5,
+    // this auto-traced artwork has 3 small closed ink loops (a rim-ellipse
+    // fringe, a highlight fleck, a ground-line remnant) genuinely disconnected
+    // from the main silhouette even with no crop applied — real ink, but each
+    // sits in open space far from anything else, so the router's connector to
+    // reach them is a long, visible diagonal rather than a subtle bridge.
+    // Raising the dust threshold above their lengths (146/492/563 art units)
+    // drops them; the main body (35 edges, ~7200 units) is unaffected.
+    // (user decision 2026-07-03: exclude these three over a visible seam)
+    minDustLen: 600,
   },
   certifications: {
     d: () => awardArtD,

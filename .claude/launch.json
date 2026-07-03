@@ -11,6 +11,14 @@
       "autoPort": true
     },
     {
+      "name": "Sketch Gallery",
+      "description": "Static server for sketch-gallery.html (centerline trace debug view)",
+      "cwd": "/Users/naman/resume",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5055"],
+      "port": 5055
+    },
+    {
       "name": "Portfolio Resume",
       "description": "Vite 6 + React 18 + TypeScript 5.2 - full portfolio site",
       "cwd": "/Users/naman/Mine/Portfolio_resume",

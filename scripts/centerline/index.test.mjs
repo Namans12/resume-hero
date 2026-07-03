@@ -26,6 +26,22 @@ test('traces a synthetic two-bar artwork end to end', () => {
   assert.ok(r.maskW > 2 && r.maskW < 5, `maskW ${r.maskW}`);
 });
 
+test('minDustLen raises the dust threshold for one artwork without a default change', () => {
+  // a long bar plus a short one, both above the DEFAULT dust threshold
+  const D2 = 'M 100 100 H 400 V 112 H 100 Z M 100 200 H 130 V 212 H 100 Z';
+  const base = {
+    name: 'test-dust', d: D2, entryHint: [100, 106], exitHint: [115, 206],
+    toLocal: p => p, localScale: 1,
+  };
+  const noOverride = traceArtwork(base);
+  assert.equal(noOverride.stats.components, 2);
+  assert.equal(noOverride.stats.connectors, 1);
+
+  const withOverride = traceArtwork({ ...base, minDustLen: 25 });
+  assert.equal(withOverride.stats.components, 1);
+  assert.equal(withOverride.stats.connectors, 0);
+});
+
 test('crops keep the trace inside the crop box', () => {
   const r = traceArtwork({
     name: 'test-crop',
