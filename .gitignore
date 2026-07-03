@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Regenerable debug artifact from `generate-sketch-paths.mjs --gallery`
+sketch-gallery.html

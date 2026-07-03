@@ -8,7 +8,8 @@ import { ABOUT_ART, ACHIEVEMENTS_ART, CERTIFICATIONS_ART, EXPERIENCE_ART, HANDS_
    down, the line blooms into a one-line illustration beside each section
    (Lemonade-giveback style) and threads past the user's real artworks (the
    About face, the Skills gears, the Projects rocket and the Certifications→
-   Contact hands+book), each revealed by a wipe riding the same frontier. THE LINE ENDS in the hands+book: it flows into the reaching
+   Contact hands+book), each drawn in by a pen-synced mask stroke that rides
+   the line's own trace through it. THE LINE ENDS in the hands+book: it flows into the reaching
    hand's cuff and finishes on the artwork's trailing stroke below Contact's
    Work/location pill - it does NOT return to the right side (explicit user
    instruction, 2026-07-02, replacing the earlier footer-based end anchor).
@@ -596,8 +597,12 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         g.style.display = '';
         mp.setAttribute('d', st.d);
         mp.style.strokeWidth = `${Math.max(6, st.maskW)}`;
-        const lowest = id === 'hands' && handsArtSpan
-          ? handsArtSpan.bottom
+        // 'hands' is not a SKETCHES id (its geometry lives in HANDS_ART), so
+        // it must NEVER index SKETCHES — branch on it first and fall back to
+        // the station's own exit if handsArtSpan is somehow absent, rather
+        // than relying on the ternary's short-circuit to dodge undefined.vb.
+        const lowest = id === 'hands'
+          ? (handsArtSpan?.bottom ?? st.exit.y)
           : st.dy + SKETCHES[id as SketchId].vb[1] * st.s;
         const pIn = Math.max(0, Math.min(100, (st.entry.y / lineEnd) * 100));
         const pOut = Math.max(pIn + 0.1, Math.min(100, (lowest / lineEnd) * 100));
@@ -651,8 +656,9 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       {/* overflow visible so the dot + its glow never get clipped at the path ends */}
       <svg ref={svgRef} width="100%" height="100%" fill="none" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
         {/* The About artwork - the user's licensed drawing, pixel-faithful: a
-            faint ghost previews it, and the inked copy wipes in along the SAME
-            frontier the stroke draws to (positioned in measure()). */}
+            faint ghost previews it, and the inked copy is drawn in by a mask
+            stroke riding the pen's own trace through it (positioned in
+            measure()). */}
         <g ref={artRef} style={{ display: 'none' }}>
           {/* ghost slightly dimmed so it can't stack with the line's track
               into something that reads as already-drawn */}
@@ -674,8 +680,8 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           </mask>
         </g>
         {/* The Skills gears artwork - rotated 90° CCW beside the Skills
-            section; ghost + a page-space wipe riding the frontier while the
-            pen threads its flowing line (positioned in measure()). */}
+            section; ghost + a mask stroke riding the pen's trace, drawn in as
+            the pen threads its flowing line (positioned in measure()). */}
         <g ref={art3Ref} style={{ display: 'none' }}>
           <g data-skills-t>
             <path d={SKILLS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
@@ -699,9 +705,9 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           </mask>
         </g>
         {/* The Projects rocket artwork - the user's licensed take-off drawing
-            beside the Projects section; ghost + an art-space wipe (upright,
-            uniform transform) riding the frontier while the pen rides its
-            measured line (positioned in measure()). */}
+            beside the Projects section; ghost + a mask stroke riding the pen's
+            trace, drawn in as the pen rides its line (positioned in
+            measure()). */}
         <g ref={art4Ref} style={{ display: 'none' }}>
           <path d={PROJECTS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
           <g mask="url(#sp-projects-reveal)">
@@ -723,7 +729,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         {/* The Achievements trophy artwork - the user's licensed drawing
             beside the Achievements section, cropped (union of two art-space
             rects) so its full-width ground line becomes a short run either
-            side of the pedestal; ghost + art-space wipe riding the frontier
+            side of the pedestal; ghost + a mask stroke riding the pen's trace
             (positioned in measure()). */}
         <g ref={art5Ref} style={{ display: 'none' }}>
           <g clipPath="url(#sp-achievements-art-crop)">
@@ -752,8 +758,8 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         </g>
         {/* The Experience growth-chart artwork - the user's licensed drawing
             beside the Experience section, cropped (one art-space rect) so its
-            full-width baseline becomes grounding stubs; ghost + art-space
-            wipe riding the frontier (positioned in measure()). */}
+            full-width baseline becomes grounding stubs; ghost + a mask stroke
+            riding the pen's trace (positioned in measure()). */}
         <g ref={art7Ref} style={{ display: 'none' }}>
           <g clipPath="url(#sp-experience-art-crop)">
             <path d={EXPERIENCE_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
@@ -782,7 +788,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         {/* The Certifications award artwork - the user's licensed rosette
             badge beside the Certifications section, cropped (one art-space
             rect) so its full-width baseline becomes short grounding stubs;
-            ghost + art-space wipe riding the frontier (positioned in
+            ghost + a mask stroke riding the pen's trace (positioned in
             measure()). */}
         <g ref={art6Ref} style={{ display: 'none' }}>
           <g clipPath="url(#sp-certifications-art-crop)">
@@ -810,8 +816,8 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           </mask>
         </g>
         {/* The hands+book artwork - flipped/tilted below Contact's location
-            pill; ghost + a page-space wipe that rides the frontier. The page
-            line itself ENDS inside this drawing (positioned in measure()). */}
+            pill; ghost + a mask stroke riding the pen's trace. The page line
+            itself ENDS inside this drawing (positioned in measure()). */}
         <g ref={art2Ref} style={{ display: 'none' }}>
           <g data-hands-t>
             <path d={HANDS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
