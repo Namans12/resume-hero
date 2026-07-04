@@ -9,7 +9,12 @@ import { ABOUT_ART, ACHIEVEMENTS_ART, CERTIFICATIONS_ART, EXPERIENCE_ART, HANDS_
    (Lemonade-giveback style) and threads past the user's real artworks (the
    About face, the Skills gears, the Projects rocket and the Certifications→
    Contact hands+book), each drawn in by a pen-synced mask stroke that rides
-   the line's own trace through it. THE LINE ENDS in the hands+book: it flows into the reaching
+   the line's own trace through it. Placement is FREE-SPACE DRIVEN (user
+   2026-07-04): a per-band content skyline (rightmost painted edge, text
+   measured as glyph boxes) is the hard left boundary for every artwork AND
+   every connector waypoint - nothing may overlap or hide under a component
+   or button; art shrinks or slides vertically until it fits, or skips below
+   MIN_W. Connectors swing per the user's reference mock (see SWING). THE LINE ENDS in the hands+book: it flows into the reaching
    hand's cuff and finishes on the artwork's trailing stroke below Contact's
    Work/location pill - it does NOT return to the right side (explicit user
    instruction, 2026-07-02, replacing the earlier footer-based end anchor).
@@ -25,15 +30,36 @@ import { ABOUT_ART, ACHIEVEMENTS_ART, CERTIFICATIONS_ART, EXPERIENCE_ART, HANDS_
 const FRONTIER = 0.80;
 
 const WAVE_INSET = 39;  // wave centreline, from the wrap's right edge (= old 78px strip's centre)
-const AMP = 26;         // wave amplitude, as in the pre-motif design
-const HEAD_GAP = 36;    // clearance right of a heading's text
+const CONTENT_GAP = 28; // hard clearance between content's right edge and any art/line
 const LINE_GAP = 20;    // clearance between a motif and the wave centreline
 const MIN_W = 150;      // skip the motif when the gap is tighter than this
 const MAX_W = 330;
+const SKY_STEP = 24;    // content-skyline sampling pitch down the page
 
 const SECTIONS: SketchId[] = [
   'about', 'skills', 'experience', 'projects', 'achievements', 'certifications',
 ];
+
+/* THE EXACT CONNECTOR SHAPES from the user's Layout.svg (2026-07-04, "the
+   exact SVG pattern I want"): each hop between artworks is ONE cubic arc.
+   c1/c2 are the mock's control points normalized to the exit→entry chord -
+   u along the chord, v to the chord's LEFT - in chord lengths, extracted from
+   the file's matrix-transformed strokes. Mapping a template onto the real
+   chord reproduces the drawn curve exactly, at any hop length. Keyed by the
+   station being APPROACHED. (u<0 / u>1 are the mock's little entry/exit
+   overshoot flicks - keep them.) */
+const MOCK_ARC: Record<string, { c1: [number, number]; c2: [number, number] }> = {
+  about:          { c1: [0.333, -0.225], c2: [0.667, -0.225] }, // wave in: reuse the face stitch
+  skills:         { c1: [0.333, -0.225], c2: [0.667, -0.225] }, // face → gears
+  experience:     { c1: [0.244, -0.373], c2: [0.577, -0.373] }, // gears → chart, deep sweep
+  projects:       { c1: [-0.092, -0.146], c2: [0.242, -0.146] }, // chart → rocket, entry flick
+  achievements:   { c1: [-0.182, -0.207], c2: [0.151, -0.207] }, // rocket → trophy, entry flick
+  certifications: { c1: [0.333, -0.322], c2: [0.667, -0.322] }, // trophy → badge
+  hands:          { c1: [0.798, 0.547], c2: [1.131, 0.547] },   // badge → cuff, opposite side + exit flick
+};
+// the mock's bulges are 8-30px on ~20-110px chords; on the page's much longer
+// hops a proportional bulge would balloon, so its ABSOLUTE size is capped
+const ARC_BULGE_MAX = 72;
 
 const n1 = (v: number) => {
   const s = (Math.round(v * 10) / 10).toFixed(1);
@@ -120,18 +146,58 @@ const flowThrough = (pts: Pt[]) => {
   return d;
 };
 
-/* Wave waypoints from `from` down to `to`, meandering around the wave
-   centreline like the pre-motif design (a bend roughly every 340px). */
-const wander = (from: Pt, to: Pt, waveX: number, phase: number) => {
-  const pts: Pt[] = [from];
-  const dy = to.y - from.y;
-  const seg = Math.max(1, Math.round(dy / 340));
-  for (let i = 1; i < seg; i++) {
-    pts.push({ x: waveX + ((i + phase) % 2 ? AMP : -AMP), y: from.y + (dy * i) / seg });
-  }
-  pts.push(to);
-  return pts;
-};
+/* Render one mock-template cubic from `from` to `to`. The template's control
+   points are mapped onto the chord (bulge capped at ARC_BULGE_MAX). The
+   curve is then sampled: if every sample already clears the content skyline
+   and the column edge, the EXACT cubic is emitted; otherwise the offending
+   samples are pushed right and the hop re-routes as a Catmull through them
+   (shape preserved everywhere the mock's curve was already legal).
+   Artwork-body rows are exempt - the line is MEANT to be there. */
+const makeArc = (
+  boundLocal: (top: number, bot: number) => number,
+  artRow: (top: number, bot: number) => boolean,
+  cwLocal: number,
+) =>
+  (from: Pt, to: Pt, tpl?: { c1: [number, number]; c2: [number, number] }): string => {
+    const T = tpl ?? { c1: [0.333, -0.14] as [number, number], c2: [0.667, -0.14] as [number, number] };
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const L = Math.hypot(dx, dy) || 1;
+    const t = { x: dx / L, y: dy / L };
+    const n = { x: -t.y, y: t.x };
+    const vAbs = Math.max(Math.abs(T.c1[1]), Math.abs(T.c2[1])) * L;
+    const kv = vAbs > ARC_BULGE_MAX ? ARC_BULGE_MAX / vAbs : 1;
+    const cp = (u: number, v: number): Pt => ({
+      x: from.x + t.x * u * L + n.x * v * kv * L,
+      y: from.y + t.y * u * L + n.y * v * kv * L,
+    });
+    const c1 = cp(T.c1[0], T.c1[1]);
+    const c2 = cp(T.c2[0], T.c2[1]);
+    const bez = (s: number): Pt => {
+      const m = 1 - s;
+      return {
+        x: m * m * m * from.x + 3 * m * m * s * c1.x + 3 * m * s * s * c2.x + s * s * s * to.x,
+        y: m * m * m * from.y + 3 * m * m * s * c1.y + 3 * m * s * s * c2.y + s * s * s * to.y,
+      };
+    };
+    const steps = Math.max(4, Math.round(L / 28));
+    const samples: Pt[] = [];
+    let dirty = false;
+    for (let i = 1; i < steps; i++) {
+      const p = bez(i / steps);
+      let x = p.x;
+      if (!artRow(p.y - 12, p.y + 12)) {
+        const bnd = boundLocal(p.y - 12, p.y + 12);
+        if (bnd > 0) x = Math.max(x, bnd + 16);
+      }
+      x = Math.min(x, cwLocal - 8);
+      if (Math.abs(x - p.x) > 0.5) dirty = true;
+      samples.push({ x, y: p.y });
+    }
+    if (!dirty) {
+      return ` C ${n1(c1.x)} ${n1(c1.y)} ${n1(c2.x)} ${n1(c2.y)} ${n1(to.x)} ${n1(to.y)}`;
+    }
+    return flowThrough([from, ...samples, to]);
+  };
 
 interface Station {
   id: string;
@@ -144,6 +210,9 @@ interface Station {
   dy: number;
   /** mask-stroke width (canvas units) for this station's ink reveal */
   maskW: number;
+  /** the placed box (canvas units) - the artwork's visible extent, used by
+      the dev-only __spDebug overlap checks */
+  box: { x: number; y: number; w: number; h: number };
   /** optional tangent-aligned approach point: the connector flows through it
       straight into the entry (used by the hands artwork, whose cuff wants
       the line to arrive along the arm's own outward direction) */
@@ -153,21 +222,27 @@ interface Station {
 /* The full route: in at the top on the wave, through each illustration, and
    (when the terminal hands+book is placed) ENDING inside it - otherwise out
    at the bottom on the wave. One single continuous path. */
-const buildPath = (h: number, waveX: number, stations: Station[], endsOnLast: boolean) => {
+const buildPath = (
+  h: number, waveX: number, stations: Station[], endsOnLast: boolean,
+  boundLocal: (top: number, bot: number) => number,
+  artRow: (top: number, bot: number) => boolean, cwLocal: number,
+) => {
   let d = `M ${n1(waveX)} 0`;
   let cur: Pt = { x: waveX, y: 0 };
-  let phase = 0;
+  const arc = makeArc(boundLocal, artRow, cwLocal);
   const spans: Array<{ id: string; from: number; to: number }> = [];
   for (const st of stations) {
-    // wander down the wave, then swing in above the drawing's entry point —
-    // or, when the station asks for it, sweep straight through its tangent
-    // approach point so the line lands along the drawing's own direction
-    const pre: Pt = st.pre ?? { x: st.entry.x, y: Math.max(st.entry.y - 56, cur.y + 6) };
-    const waveTo = (st.pre ? pre.y - 180 : st.entry.y - 170);
-    const pts = waveTo > cur.y + 40
-      ? [...wander(cur, { x: waveX, y: waveTo }, waveX, phase), pre, st.entry]
-      : [cur, pre, st.entry];
-    d += flowThrough(pts);
+    // one mock-template arc straight from the previous exit into this
+    // drawing's entry - edge to edge, exactly as drawn in Layout.svg. The
+    // hands keep their tangent approach point (the cuff wants the line
+    // arriving along the arm's own direction): arc to the pre, then a short
+    // straight landing into the entry.
+    if (st.pre) {
+      d += arc(cur, st.pre, MOCK_ARC[st.id]);
+      d += flowThrough([st.pre, st.entry]);
+    } else {
+      d += arc(cur, st.entry, MOCK_ARC[st.id]);
+    }
     const from = d.length;
     // WELD the motif into the same subpath: its d starts with an M to the
     // pen's current position, and a mid-path M (a new subpath) makes Blink
@@ -177,9 +252,8 @@ const buildPath = (h: number, waveX: number, stations: Station[], endsOnLast: bo
     d += ` ${st.d.replace(/^M\b/, 'L')}`;
     spans.push({ id: st.id, from, to: d.length });
     cur = st.exit;
-    phase++;
   }
-  if (!endsOnLast) d += flowThrough(wander(cur, { x: waveX, y: h }, waveX, phase));
+  if (!endsOnLast) d += arc(cur, { x: waveX, y: h });
   return { d, spans };
 };
 
@@ -285,36 +359,153 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       const cw = Math.max(1, Math.round(wrapRect.width));
       const waveX = cw - WAVE_INSET;
 
-      // One station per section: the illustration rides BESIDE the section
-      // (vertically centred on it) in the right-side space, right-aligned
-      // against the wave. Width still fits the gap right of the heading's
-      // TEXT (measured via a Range - the h2 is a full-width block), which
-      // is the narrowest reliable clearance in every section.
+      // ----- Content skyline: the rightmost VISUAL edge of every section's
+      // content, sampled every SKY_STEP px down the page (document x, per
+      // band). This is the hard boundary art and line stay right of (user
+      // 2026-07-04: nothing may overlap or hide under any component or
+      // button). Wrapper divs often span the full row while painting nothing,
+      // so only elements that actually paint (media, form controls,
+      // backgrounds, borders, shadows) and raw text runs (tight glyph boxes
+      // via Range) are added - a bare container never blocks the strip.
+      const skyN = Math.max(1, Math.ceil((footerBottom - lineTop) / SKY_STEP));
+      const sky = new Float32Array(skyN);
+      const addRect = (r: DOMRect) => {
+        if (r.width < 1 || r.height < 1) return;
+        const i0 = Math.max(0, Math.floor((r.top + window.scrollY - lineTop) / SKY_STEP));
+        const i1 = Math.min(skyN - 1, Math.floor((r.bottom + window.scrollY - lineTop) / SKY_STEP));
+        for (let i = i0; i <= i1; i++) if (r.right > sky[i]) sky[i] = r.right;
+      };
+      const textRange = document.createRange();
+      for (const secId of [...SECTIONS, 'contact']) {
+        const sec = document.getElementById(secId);
+        if (!sec) continue;
+        for (const el of sec.querySelectorAll('*')) {
+          if (el.namespaceURI === 'http://www.w3.org/2000/svg') {
+            // inner svg nodes: the outer <svg> box already covers them
+            if (el.tagName.toLowerCase() === 'svg') addRect(el.getBoundingClientRect());
+            continue;
+          }
+          const cs = getComputedStyle(el);
+          if (cs.position === 'fixed' || cs.display === 'none') continue;
+          const paints =
+            el.matches('img,video,canvas,button,input,textarea,select,iframe') ||
+            cs.backgroundColor !== 'rgba(0, 0, 0, 0)' ||
+            cs.backgroundImage !== 'none' ||
+            parseFloat(cs.borderTopWidth) > 0 || parseFloat(cs.borderRightWidth) > 0 ||
+            cs.boxShadow !== 'none';
+          if (paints) { addRect(el.getBoundingClientRect()); continue; }
+          for (const node of el.childNodes) {
+            if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
+              textRange.selectNodeContents(node);
+              addRect(textRange.getBoundingClientRect());
+            }
+          }
+        }
+      }
+      // Max skyline over a LINE-LOCAL y band, as a line-local left bound
+      // (content right edge + the hard clearance). 0 where the band is empty.
+      const skyBoundLocal = (topLocal: number, botLocal: number) => {
+        const i0 = Math.max(0, Math.floor(topLocal / SKY_STEP));
+        const i1 = Math.min(skyN - 1, Math.floor(botLocal / SKY_STEP));
+        let m = 0;
+        for (let i = i0; i <= i1; i++) if (sky[i] > m) m = sky[i];
+        return m === 0 ? 0 : Math.max(0, m - wrapRect.left + CONTENT_GAP);
+      };
+      // A placed artwork occupies its bands COMPLETELY (the strip is too
+      // narrow to sit two drawings side by side), so later placements must
+      // skip those rows - without this, a drawing that grows into open space
+      // can slide over its neighbour's box. Tracked SEPARATELY from the
+      // content skyline: content pushes the line right, artwork rows are
+      // where the line belongs.
+      const artRows = new Uint8Array(skyN);
+      const blockBandsLocal = (topLocal: number, botLocal: number) => {
+        const i0 = Math.max(0, Math.floor((topLocal - 12) / SKY_STEP));
+        const i1 = Math.min(skyN - 1, Math.floor((botLocal + 12) / SKY_STEP));
+        for (let i = i0; i <= i1; i++) artRows[i] = 1;
+      };
+      const artRowOver = (topLocal: number, botLocal: number) => {
+        const i0 = Math.max(0, Math.floor(topLocal / SKY_STEP));
+        const i1 = Math.min(skyN - 1, Math.floor(botLocal / SKY_STEP));
+        for (let i = i0; i <= i1; i++) if (artRows[i]) return true;
+        return false;
+      };
+
+      // One station per section: the illustration rides BESIDE the section in
+      // whatever free space the skyline leaves, right-aligned against the
+      // wave. The fit only ever SHRINKS from the cap: a smaller box spans
+      // fewer skyline bands, so the available gap can only grow and the
+      // iteration converges monotonically. If the preferred centre is too
+      // tight, the band slides up/down in 48px steps and the placement that
+      // fits the LARGEST artwork (preferring the centre) wins.
       const gapRight = waveX - LINE_GAP;
       const stations: Station[] = [];
       const place = (
         id: SketchId,
         def: (typeof SKETCHES)[SketchId],
         centerDocY: number,
-        gapLeftDoc: number,
-        opts?: { maxW?: number; nudgeX?: number },
+        opts?: { maxW?: number; nudgeX?: number; spanH?: number },
       ): Station | null => {
-        const avail = gapRight - (gapLeftDoc - wrapRect.left);
-        if (avail < MIN_W) return null;
         const [bw, bh] = def.vb;
-        const s = Math.min(opts?.maxW ?? MAX_W, avail) / bw;
-        // nudged boxes may slide left of the wave-hugging default, but never
-        // past the heading-text clearance
-        const dx = Math.max(
-          gapLeftDoc - wrapRect.left,
-          gapRight - bw * s - (opts?.nudgeX ?? 0),
-        );
+        const capW = Math.min(opts?.maxW ?? MAX_W, gapRight - CONTENT_GAP);
+        // dy for a box of width w at this offset, honouring the line bounds:
         // floored so the first drawing never rises above the line's start
         // (nothing may pre-draw), and kept off the very bottom of the line
-        const dy = Math.min(
-          Math.max(centerDocY - lineTop - (bh * s) / 2, 16),
-          lineHeight - bh * s - 24,
+        const dyAt = (off: number, w: number) => Math.min(
+          Math.max(centerDocY + off - lineTop - (bh * w / bw) / 2, 16),
+          lineHeight - bh * (w / bw) - 24,
         );
+        // widest box allowed by the skyline over the band a w-wide box spans;
+        // rows already holding another artwork are off-limits entirely. The
+        // band extends 72px ABOVE the box: the pen needs that runway to swing
+        // from the wave into the drawing's entry without cutting the corner
+        // of a card that ends just above the artwork.
+        const fitAt = (off: number, w: number) => {
+          const dy = dyAt(off, w);
+          if (artRowOver(dy - 12, dy + (bh * w) / bw + 12)) return 0;
+          return Math.min(capW, gapRight - skyBoundLocal(dy - 72, dy + (bh * w) / bw + 12));
+        };
+        let best: { s: number; dx: number; dy: number; score: number } | null = null;
+        // the slide range scales with the section: tall sections (the
+        // carousel) have free bands far from their midpoint
+        const maxOff = Math.max(288, Math.min(600, (opts?.spanH ?? 0) / 2));
+        const offs = [0];
+        for (let o = 48; o <= maxOff; o += 48) offs.push(o, -o);
+        for (const off of offs) {
+          // only-shrink from the cap: a smaller box spans fewer skyline
+          // bands, so this converges monotonically...
+          let s = capW / bw;
+          for (let it = 0; it < 5; it++) {
+            const fitW = fitAt(off, s * bw);
+            if (fitW >= s * bw - 0.5) break;
+            s = Math.max(0, fitW) / bw;
+            if (s * bw < MIN_W) break;
+          }
+          // ...but it can die on a straddle a smaller box slips past (a tall
+          // cap-sized box catches a blocker row the floor-sized box clears).
+          // Re-probe upward from the floor with a short binary search.
+          if (s * bw < MIN_W && fitAt(off, MIN_W) >= MIN_W) {
+            let lo = MIN_W, hi = capW;
+            for (let it = 0; it < 5; it++) {
+              const mid = (lo + hi) / 2;
+              if (fitAt(off, mid) >= mid) lo = mid; else hi = mid;
+            }
+            s = lo / bw;
+          }
+          // prefer the section's own centre: a slide only wins when it buys
+          // meaningfully more size (~8px of width per 64px of drift)
+          const score = s * bw - Math.abs(off) * 0.125;
+          if (s * bw >= MIN_W && (!best || score > best.score)) {
+            const dy = dyAt(off, s * bw);
+            const bound = skyBoundLocal(dy - 72, dy + bh * s + 12);
+            // nudged boxes may slide left of the wave-hugging default, but
+            // never past the skyline clearance
+            const dx = Math.max(bound, gapRight - bw * s - (opts?.nudgeX ?? 0));
+            best = { s, dx, dy, score };
+          }
+          if (best && off === 0 && best.s * bw >= capW - 0.5) break;
+        }
+        if (!best) return null;
+        const { s, dx, dy } = best;
         return {
           id,
           d: transformPath(def.d, s, dx, dy),
@@ -322,6 +513,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           exit: { x: def.exit[0] * s + dx, y: def.exit[1] * s + dy },
           s, dx, dy,
           maskW: def.maskW * s,
+          box: { x: dx, y: dy, w: bw * s, h: bh * s },
         };
       };
 
@@ -333,11 +525,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       let experienceStation: Station | null = null;
       for (const id of SECTIONS) {
         const section = document.getElementById(id);
-        const heading = section?.querySelector('h2');
-        if (!section || !heading) continue;
-        const range = document.createRange();
-        range.selectNodeContents(heading);
-        const headRect = range.getBoundingClientRect();
+        if (!section) continue;
         const secRect = section.getBoundingClientRect();
         let centerDoc = secRect.top + secRect.height / 2 + window.scrollY;
         if (id === 'about') {
@@ -352,13 +540,14 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         // shows in the gap beside the project cards (user ask, 2026-07-02);
         // the trophy and award badge match that cap for the same clearance
         const st = place(
-          id, SKETCHES[id], centerDoc, headRect.right + HEAD_GAP,
-          id === 'projects' ? { maxW: 260, nudgeX: 24 }
-            : id === 'achievements' || id === 'certifications' ? { maxW: 260 }
-              : undefined,
+          id, SKETCHES[id], centerDoc,
+          id === 'projects' ? { maxW: 260, nudgeX: 24, spanH: secRect.height }
+            : id === 'achievements' || id === 'certifications' ? { maxW: 260, spanH: secRect.height }
+              : { spanH: secRect.height },
         );
         if (st) {
           stations.push(st);
+          blockBandsLocal(st.box.y, st.box.y + st.box.h);
           if (id === 'about') aboutStation = st;
           if (id === 'skills') skillsStation = st;
           if (id === 'projects') projectsStation = st;
@@ -428,6 +617,83 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           const room = footerTop - 24 - lineTop - A.y;
           const off1 = (lowestAt(buildM(k)) - A.y) / k;
           if (off1 > 0 && k * off1 > room) k = Math.max(0.26, room / off1);
+          // Free-space guard (user 2026-07-04): the give may no longer tuck
+          // under the contact content. Slide the whole artwork right into the
+          // free strip (the book anchor may leave its wide-layout x), then
+          // shrink around the anchor until BOTH edges clear - the skyline on
+          // the left, the column edge on the right. In tight quarters (the
+          // contact form fills the right half) this lands the small in-strip
+          // hand+book of the user's reference mock, so the scale floor is far
+          // below the old 0.26. (Shrinking only reduces the downward extent,
+          // so the footer guard above holds.)
+          const cornersAt = (mm: Affine) => [
+            apply(mm, bx, by), apply(mm, bx + bw, by),
+            apply(mm, bx, by + bh), apply(mm, bx + bw, by + bh),
+          ];
+          {
+            const KMIN = 0.08;
+            for (let pass = 0; pass < 3; pass++) {
+              const c = cornersAt(buildM(k));
+              const bound = skyBoundLocal(
+                Math.min(...c.map(p => p.y)), Math.max(...c.map(p => p.y)));
+              let minX = Math.min(...c.map(p => p.x));
+              let maxX = Math.max(...c.map(p => p.x));
+              // slide right into the strip as far as the column allows, and
+              // make sure the anchor itself sits inside the strip so the
+              // shrink below has somewhere to converge to
+              const shift = Math.max(
+                Math.min(Math.max(0, bound - minX), Math.max(0, cw - 8 - maxX)),
+                A.x < bound + 20 ? bound + 20 - A.x : 0,
+              );
+              if (shift > 0) { A.x += shift; minX += shift; maxX += shift; }
+              let k2 = k;
+              if (minX < bound) {
+                const offL = (A.x - minX) / k;
+                if (offL > 0) k2 = Math.min(k2, (A.x - bound) / offL);
+              }
+              if (maxX > cw - 8) {
+                const offR = (maxX - A.x) / k;
+                if (offR > 0) k2 = Math.min(k2, (cw - 8 - A.x) / offR);
+              }
+              const next = Math.max(KMIN, k2);
+              const done = next === k && shift === 0;
+              k = next;
+              if (done) break;
+            }
+          }
+          // Final verdict: the box must clear the skyline AND the column. On
+          // narrow layouts the side strip can vanish entirely (the form runs
+          // to the column edge) - then walk the box DOWN to the first free
+          // band above the footer. If none exists the hands sit this layout
+          // out and the line ends on the wave instead (better honest than
+          // hidden under the form).
+          const evalFit = () => {
+            const c = cornersAt(buildM(k));
+            const top = Math.min(...c.map(p => p.y)), bot = Math.max(...c.map(p => p.y));
+            const minX = Math.min(...c.map(p => p.x)), maxX = Math.max(...c.map(p => p.x));
+            const bound = skyBoundLocal(top, bot);
+            return {
+              top, bot, minX, maxX,
+              fits: minX >= bound - 0.5 && maxX <= cw - 8 + 0.5 && !artRowOver(top, bot),
+            };
+          };
+          let fit = evalFit();
+          if (!fit.fits) {
+            const boxH = fit.bot - fit.top, boxW = fit.maxX - fit.minX;
+            const roomBot = footerTop - 24 - lineTop;
+            for (let yTop = fit.top; yTop + boxH <= roomBot; yTop += SKY_STEP) {
+              const b2 = skyBoundLocal(yTop, yTop + boxH);
+              if (b2 <= cw - 8 - boxW - 2 && !artRowOver(yTop, yTop + boxH)) {
+                A.y += yTop - fit.top;
+                A.x += b2 + 2 - fit.minX;
+                fit = evalFit();
+                break;
+              }
+            }
+          }
+          if (!fit.fits) {
+            // no free band anywhere - skip the hands for this layout
+          } else {
           handsM = buildM(k);
 
           const entry = apply(handsM, HANDS_ART.threadEntry[0], HANDS_ART.threadEntry[1]);
@@ -439,26 +705,40 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             x: entry.x + ((entry.x - bookP.x) / dirLen) * 90,
             y: entry.y + ((entry.y - bookP.y) / dirLen) * 90,
           };
-          stations.push({
-            id: 'hands',
-            d: transformPathAffine(HANDS_ART.thread, handsM),
-            entry, exit, s: k, dx: 0, dy: 0, pre,
-            maskW: HANDS_ART.maskW * k,
-          });
           // the artwork's page extent decides how far the canvas must reach
           const corners = [
             apply(handsM, bx, by), apply(handsM, bx + bw, by),
             apply(handsM, bx, by + bh), apply(handsM, bx + bw, by + bh),
           ];
+          const xs = corners.map(p => p.x);
           const ys = corners.map(p => p.y);
           handsArtSpan = { top: Math.min(...ys), bottom: Math.max(...ys) };
+          stations.push({
+            id: 'hands',
+            d: transformPathAffine(HANDS_ART.thread, handsM),
+            entry, exit, s: k, dx: 0, dy: 0, pre,
+            maskW: HANDS_ART.maskW * k,
+            box: {
+              x: Math.min(...xs), y: handsArtSpan.top,
+              w: Math.max(...xs) - Math.min(...xs), h: handsArtSpan.bottom - handsArtSpan.top,
+            },
+          });
           endLocalY = Math.max(exit.y, handsArtSpan.bottom) + 28;
+          }
         }
       }
       const lineEnd = Math.max(200, endLocalY);
 
-      const { d, spans } = buildPath(lineEnd, waveX, stations, !!handsM);
+      const { d, spans } = buildPath(lineEnd, waveX, stations, !!handsM, skyBoundLocal, artRowOver, cw);
       spansRef.current = spans;
+      if (import.meta.env.DEV) {
+        // dev-only: exact placement geometry for overlap verification/tuning
+        (window as unknown as Record<string, unknown>).__spDebug = {
+          lineTop, wrapLeft: wrapRect.left, cw, lineEnd,
+          sky: Array.from(sky),
+          stations: stations.map(st => ({ id: st.id, s: st.s, box: st.box })),
+        };
+      }
       // Everything below only costs time when the geometry actually changed —
       // the d string encodes all of it, so it doubles as the change signature.
       const sig = `${cw}|${d}`;
