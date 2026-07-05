@@ -38,9 +38,10 @@ const fitPieceSafe = (pts, tol) => {
 };
 
 export function traceArtwork(spec) {
-  const { name, d, crops = null, entryHint, exitHint, toLocal, localScale, fitTol = 0.35, minDustLen } = spec;
-  const polys = flattenPath(d, 0.5);
-  const bmp = rasterize(polys, { crops });
+  const { name, d, bmp: bmpIn = null, crops = null, entryHint, exitHint, toLocal, localScale, fitTol = 0.35, minDustLen } = spec;
+  // raster sources (the 2026-07-05 one-line PNGs) hand in a prebuilt ink
+  // bitmap; vector sources still go path → raster here
+  const bmp = bmpIn ?? rasterize(flattenPath(d, 0.5), { crops });
   const dt = chamfer(bmp);
   const skel = thin(bmp);
 

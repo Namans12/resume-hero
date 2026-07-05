@@ -78,6 +78,13 @@ html.has-custom-cursor * { cursor: none !important; }
    view, completing at the footer. pathLength="100" normalises the dash so the
    draw works for any generated length. JS sets --sp-start/--sp-end once. */
 .scroll-path__draw { stroke-dasharray: 100; stroke-dashoffset: 100; }
+/* The pen dot is a TINY ROUND-CAP DASH on a copy of the same path — the same
+   dash engine that draws the ink positions it, so dot and ink front share one
+   parameterization and stay glued (offset-path used its own length math and
+   visibly drifted from the dash on long dense paths). Pattern period 200 (of
+   pathLength 100) so only one dot ever shows; offset 200→100 walks it from
+   the start to the end of the drawn portion. */
+.scroll-path__dot { stroke-dasharray: 0.02 199.98; stroke-dashoffset: 200; }
 
 @supports (animation-timeline: scroll()) {
   .scroll-path__draw {
@@ -87,17 +94,15 @@ html.has-custom-cursor * { cursor: none !important; }
     animation-range-end: var(--sp-end, 100%);
   }
   .scroll-path__dot {
-    offset-rotate: 0deg;
-    animation: spDot linear both, scrollDotPulse 1.8s ease-in-out infinite;
-    animation-timeline: scroll(root block), auto;
+    animation: spDot linear both;
+    animation-timeline: scroll(root block);
     animation-range-start: var(--sp-start, 0px);
     animation-range-end: var(--sp-end, 100%);
   }
 }
 
 @keyframes spDraw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
-@keyframes spDot  { from { offset-distance: 0%; } to { offset-distance: 100%; } }
-@keyframes scrollDotPulse { 0%, 100% { r: 6px; } 50% { r: 8px; } }
+@keyframes spDot  { from { stroke-dashoffset: 200; } to { stroke-dashoffset: 100; } }
 
 /* ── Cinematic side-nav ─────────────────────────────────────────── */
 .cine-nav__label {

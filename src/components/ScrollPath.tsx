@@ -1,25 +1,22 @@
 import { useEffect, useRef } from 'react';
-import { ABOUT_ART, ACHIEVEMENTS_ART, CERTIFICATIONS_ART, EXPERIENCE_ART, HANDS_ART, PROJECTS_ART, SKILLS_ART, SKETCHES, type SketchId } from './sketchPaths';
+import { SKETCHES, type SketchId } from './sketchPaths';
 
 /* A single one-line route anchored to the page (absolute) alongside the right
    edge, from the About section down through every section. It SCROLLS WITH
    the content - you only see the on-screen slice - and draws solid down to
    the frontier of the viewport, leaving the part below unfilled. On its way
-   down, the line blooms into a one-line illustration beside each section
-   (Lemonade-giveback style) and threads past the user's real artworks (the
-   About face, the Skills gears, the Projects rocket and the Certifications→
-   Contact hands+book), each drawn in by a pen-synced mask stroke that rides
-   the line's own trace through it. Placement is FREE-SPACE DRIVEN (user
-   2026-07-04): a per-band content skyline (rightmost painted edge, text
-   measured as glyph boxes) is the hard left boundary for every artwork AND
-   every connector waypoint - nothing may overlap or hide under a component
-   or button; art shrinks or slides vertically until it fits, or skips below
-   MIN_W. Connectors swing per the user's reference mock (see SWING). THE LINE ENDS in the hands+book: it flows into the reaching
-   hand's cuff and finishes on the artwork's trailing stroke below Contact's
-   Work/location pill - it does NOT return to the right side (explicit user
-   instruction, 2026-07-02, replacing the earlier footer-based end anchor).
-   Pure CSS scroll-driven (animation-timeline: scroll()); JS only measures
-   geometry on load/resize. Desktop only.
+   down, the line becomes each section's one-line illustration (traced from
+   the user's svg/*.png artworks, 2026-07-05): the pen enters the drawing at
+   its entry tail, rides every stroke of it as ONE continuous line, leaves at
+   the exit tail and flows on to the next section's drawing - one unified
+   architectural illustration. Placement is FREE-SPACE DRIVEN: a per-band
+   content skyline (rightmost painted edge, text measured as glyph boxes) is
+   the hard left boundary for every artwork AND every connector waypoint -
+   nothing may overlap or hide under a component or button; art shrinks or
+   slides vertically until it fits, or skips below MIN_W. THE LINE ENDS in
+   the hands+book artwork below Contact's location pill - it does NOT return
+   to the wave. Pure CSS scroll-driven (animation-timeline: scroll()); JS
+   only measures geometry on load/resize. Desktop only.
 
    LOCKED (do not change without an explicit ask): the start anchor (About
    heading), FRONTIER, and the CSS-driven draw mechanism (pathLength=100 +
@@ -29,37 +26,34 @@ import { ABOUT_ART, ACHIEVEMENTS_ART, CERTIFICATIONS_ART, EXPERIENCE_ART, HANDS_
 // 0.5 = middle, ~0.85 = lower third (near the bottom), 1 = very bottom edge.
 const FRONTIER = 0.80;
 
-const WAVE_INSET = 39;  // wave centreline, from the wrap's right edge (= old 78px strip's centre)
+const WAVE_INSET = 39;  // wave centreline, from the wrap's right edge
 const CONTENT_GAP = 28; // hard clearance between content's right edge and any art/line
 const LINE_GAP = 20;    // clearance between a motif and the wave centreline
-const MIN_W = 150;      // skip the motif when the gap is tighter than this
+const MIN_W = 130;      // skip the motif when the gap is tighter than this
 const MAX_W = 330;
 const SKY_STEP = 24;    // content-skyline sampling pitch down the page
 
-const SECTIONS: SketchId[] = [
+const SECTIONS: Exclude<SketchId, 'hands'>[] = [
   'about', 'skills', 'experience', 'projects', 'achievements', 'certifications',
 ];
 
-/* THE EXACT CONNECTOR SHAPES from the user's Layout.svg (2026-07-04, "the
-   exact SVG pattern I want"): each hop between artworks is ONE cubic arc.
-   c1/c2 are the mock's control points normalized to the exit→entry chord -
-   u along the chord, v to the chord's LEFT - in chord lengths, extracted from
-   the file's matrix-transformed strokes. Mapping a template onto the real
-   chord reproduces the drawn curve exactly, at any hop length. Keyed by the
-   station being APPROACHED. (u<0 / u>1 are the mock's little entry/exit
-   overshoot flicks - keep them.) */
+/* Connector templates: each hop between artworks is ONE cubic arc. c1/c2 are
+   control points normalized to the exit→entry chord - u along the chord, v
+   to the chord's LEFT - in chord lengths. Keyed by the station being
+   APPROACHED. SIMPLE on purpose (user 2026-07-06): one gentle S-free curve
+   per hop — no overshoot flicks, no deep sweeps — so the connectors read as
+   a calm continuation of each drawing's own exit tail. */
 const MOCK_ARC: Record<string, { c1: [number, number]; c2: [number, number] }> = {
-  about:          { c1: [0.333, -0.225], c2: [0.667, -0.225] }, // wave in: reuse the face stitch
-  skills:         { c1: [0.333, -0.225], c2: [0.667, -0.225] }, // face → gears
-  experience:     { c1: [0.244, -0.373], c2: [0.577, -0.373] }, // gears → chart, deep sweep
-  projects:       { c1: [-0.092, -0.146], c2: [0.242, -0.146] }, // chart → rocket, entry flick
-  achievements:   { c1: [-0.182, -0.207], c2: [0.151, -0.207] }, // rocket → trophy, entry flick
-  certifications: { c1: [0.333, -0.322], c2: [0.667, -0.322] }, // trophy → badge
-  hands:          { c1: [0.798, 0.547], c2: [1.131, 0.547] },   // badge → cuff, opposite side + exit flick
+  about:          { c1: [0.333, -0.16], c2: [0.667, -0.16] },
+  skills:         { c1: [0.333, -0.16], c2: [0.667, -0.16] },
+  experience:     { c1: [0.333, -0.18], c2: [0.667, -0.18] },
+  projects:       { c1: [0.333, -0.14], c2: [0.667, -0.14] },
+  achievements:   { c1: [0.333, -0.14], c2: [0.667, -0.14] },
+  certifications: { c1: [0.333, -0.18], c2: [0.667, -0.18] },
+  hands:          { c1: [0.333, -0.16], c2: [0.667, -0.16] },
 };
-// the mock's bulges are 8-30px on ~20-110px chords; on the page's much longer
-// hops a proportional bulge would balloon, so its ABSOLUTE size is capped
-const ARC_BULGE_MAX = 72;
+// a proportional bulge would balloon on long hops - cap its ABSOLUTE size
+const ARC_BULGE_MAX = 56;
 
 const n1 = (v: number) => {
   const s = (Math.round(v * 10) / 10).toFixed(1);
@@ -99,39 +93,6 @@ const transformPath = (d: string, s: number, dx: number, dy: number) => {
 
 type Pt = { x: number; y: number };
 
-/* Full affine (supports the hands artwork's horizontal flip + tilt):
-   x' = a·x + c·y + e ; y' = b·x + d·y + f  — same order as SVG matrix(). */
-type Affine = { a: number; b: number; c: number; d: number; e: number; f: number };
-const apply = (m: Affine, x: number, y: number): Pt => ({
-  x: m.a * x + m.c * y + m.e,
-  y: m.b * x + m.d * y + m.f,
-});
-
-/* Affine version of transformPath for M/L/C/Q paths (no arcs - arc sweep
-   flags invert under reflection, so threads that get flipped avoid them). */
-const transformPathAffine = (d: string, m: Affine) => {
-  const t = d.split(/\s+/);
-  const out: string[] = [];
-  let i = 0;
-  const push = (x: string, y: string) => {
-    const p = apply(m, parseFloat(x), parseFloat(y));
-    out.push(n1(p.x), n1(p.y));
-  };
-  while (i < t.length) {
-    const c = t[i];
-    if (c === 'M' || c === 'L') {
-      out.push(c); push(t[i + 1], t[i + 2]); i += 3;
-    } else if (c === 'Q') {
-      out.push(c); push(t[i + 1], t[i + 2]); push(t[i + 3], t[i + 4]); i += 5;
-    } else if (c === 'C') {
-      out.push(c); push(t[i + 1], t[i + 2]); push(t[i + 3], t[i + 4]); push(t[i + 5], t[i + 6]); i += 7;
-    } else {
-      i++;
-    }
-  }
-  return out.join(' ');
-};
-
 /* Catmull-Rom cubics through the waypoints - the flowing hand-drawn wander
    the line takes between illustrations. */
 const flowThrough = (pts: Pt[]) => {
@@ -146,12 +107,11 @@ const flowThrough = (pts: Pt[]) => {
   return d;
 };
 
-/* Render one mock-template cubic from `from` to `to`. The template's control
+/* Render one template cubic from `from` to `to`. The template's control
    points are mapped onto the chord (bulge capped at ARC_BULGE_MAX). The
    curve is then sampled: if every sample already clears the content skyline
    and the column edge, the EXACT cubic is emitted; otherwise the offending
-   samples are pushed right and the hop re-routes as a Catmull through them
-   (shape preserved everywhere the mock's curve was already legal).
+   samples are pushed right and the hop re-routes as a Catmull through them.
    Artwork-body rows are exempt - the line is MEANT to be there. */
 const makeArc = (
   boundLocal: (top: number, bot: number) => number,
@@ -208,15 +168,8 @@ interface Station {
   s: number;
   dx: number;
   dy: number;
-  /** mask-stroke width (canvas units) for this station's ink reveal */
-  maskW: number;
-  /** the placed box (canvas units) - the artwork's visible extent, used by
-      the dev-only __spDebug overlap checks */
+  /** the placed box (canvas units) - the artwork's visible extent */
   box: { x: number; y: number; w: number; h: number };
-  /** optional tangent-aligned approach point: the connector flows through it
-      straight into the entry (used by the hands artwork, whose cuff wants
-      the line to arrive along the arm's own outward direction) */
-  pre?: Pt;
 }
 
 /* The full route: in at the top on the wave, through each illustration, and
@@ -230,31 +183,20 @@ const buildPath = (
   let d = `M ${n1(waveX)} 0`;
   let cur: Pt = { x: waveX, y: 0 };
   const arc = makeArc(boundLocal, artRow, cwLocal);
-  const spans: Array<{ id: string; from: number; to: number }> = [];
   for (const st of stations) {
-    // one mock-template arc straight from the previous exit into this
-    // drawing's entry - edge to edge, exactly as drawn in Layout.svg. The
-    // hands keep their tangent approach point (the cuff wants the line
-    // arriving along the arm's own direction): arc to the pre, then a short
-    // straight landing into the entry.
-    if (st.pre) {
-      d += arc(cur, st.pre, MOCK_ARC[st.id]);
-      d += flowThrough([st.pre, st.entry]);
-    } else {
-      d += arc(cur, st.entry, MOCK_ARC[st.id]);
-    }
-    const from = d.length;
+    // one template arc straight from the previous exit into this drawing's
+    // entry - edge to edge.
+    d += arc(cur, st.entry, MOCK_ARC[st.id]);
     // WELD the motif into the same subpath: its d starts with an M to the
     // pen's current position, and a mid-path M (a new subpath) makes Blink
     // lay the dash out on a different parameterization than offset-distance
     // uses - the ink visibly runs ~2-3% of the path AHEAD of the dot. An L
     // to the same point is a zero-length no-op that keeps one subpath.
     d += ` ${st.d.replace(/^M\b/, 'L')}`;
-    spans.push({ id: st.id, from, to: d.length });
     cur = st.exit;
   }
   if (!endsOnLast) d += arc(cur, { x: waveX, y: h });
-  return { d, spans };
+  return d;
 };
 
 /* The one-line drawings pack a LOT of path length into a narrow vertical band,
@@ -262,17 +204,14 @@ const buildPath = (
    far above) the frontier. Instead, remap: the pen may never draw below the
    frontier line — it pauses at each drawing and completes it exactly as the
    frontier passes the drawing's lowest point. Returns keyframe stops of
-   path-length fractions (0..1) for evenly spaced frontier positions. */
-/* getPointAtLength is ~1ms per call on this path — sample sparingly (the
-   frontier steps are ~45px anyway) and let measure() defer this to idle.
+   path-length fractions (0..1) for evenly spaced frontier positions.
 
    Two rules shape the pen:
    1. It may not draw below the frontier (the strict prefix rule).
    2. Its speed is CAPPED: when the frontier clears a drawing's lowest dip,
       the strict rule would release the whole loop in one keyframe — chunks
       of ink popping in without the dot travelling them. The cap makes the
-      dot sweep every stroke visibly (it may finish a dense drawing a beat
-      after the frontier passes it, which reads as the pen catching up). */
+      dot sweep every stroke visibly. */
 const remapStops = (path: SVGPathElement, lineHeight: number, steps = 140) => {
   const L = path.getTotalLength();
   const N = 400;
@@ -306,18 +245,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const trackRef = useRef<SVGPathElement>(null);
   const drawRef = useRef<SVGPathElement>(null);
-  const dotRef = useRef<SVGCircleElement>(null);
-  const artRef = useRef<SVGGElement>(null);
-  const art2Ref = useRef<SVGGElement>(null);
-  const art3Ref = useRef<SVGGElement>(null);
-  const art4Ref = useRef<SVGGElement>(null);
-  const art5Ref = useRef<SVGGElement>(null);
-  const art6Ref = useRef<SVGGElement>(null);
-  const art7Ref = useRef<SVGGElement>(null);
-  const maskPathRefs = useRef<Record<string, SVGPathElement | null>>({});
-  // char-index spans of each station's welded trace within `d` (canvas-path
-  // coords into the global route) — consumed by the Task 10 stop-remapper.
-  const spansRef = useRef<Array<{ id: string; from: number; to: number }>>([]);
+  const dotRef = useRef<SVGPathElement>(null);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -342,31 +270,31 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       if (!about || !footer) { raf = requestAnimationFrame(measure); return; }
 
       const vh = window.innerHeight;
-      // Anchor the line's top to the "About" heading itself (not the section top,
-      // which sits above the eyebrow).
+      // Anchor the line's top to the "About" heading itself (not the section
+      // top, which sits above the eyebrow).
       const headingEl = about.querySelector('h2') ?? about;
       const lineTop = headingEl.getBoundingClientRect().top + window.scrollY;
-      // Provisional extent for placement clamps: the old footer-based bottom
+      // Provisional extent for placement clamps: the footer-based bottom
       // (stable - not affected by this element, unlike scrollHeight which this
       // tall element would inflate in a measure loop). The REAL end of the
       // line is set further down: it finishes inside the hands+book artwork.
       const footerBottom = footer.getBoundingClientRect().bottom + window.scrollY;
       const lineHeight = Math.max(200, footerBottom - vh * (1 - FRONTIER) - lineTop);
 
-      // Use the element's ACTUAL pixel width as the viewBox width so the box maps
-      // 1:1 on both axes (preserveAspectRatio="none") and nothing distorts.
+      // Use the element's ACTUAL pixel width as the viewBox width so the box
+      // maps 1:1 on both axes (preserveAspectRatio="none") and nothing distorts.
       const wrapRect = wrap.getBoundingClientRect();
       const cw = Math.max(1, Math.round(wrapRect.width));
       const waveX = cw - WAVE_INSET;
 
       // ----- Content skyline: the rightmost VISUAL edge of every section's
       // content, sampled every SKY_STEP px down the page (document x, per
-      // band). This is the hard boundary art and line stay right of (user
-      // 2026-07-04: nothing may overlap or hide under any component or
-      // button). Wrapper divs often span the full row while painting nothing,
-      // so only elements that actually paint (media, form controls,
-      // backgrounds, borders, shadows) and raw text runs (tight glyph boxes
-      // via Range) are added - a bare container never blocks the strip.
+      // band). This is the hard boundary art and line stay right of - nothing
+      // may overlap or hide under any component or button. Wrapper divs often
+      // span the full row while painting nothing, so only elements that
+      // actually paint (media, form controls, backgrounds, borders, shadows)
+      // and raw text runs (tight glyph boxes via Range) are added - a bare
+      // container never blocks the strip.
       const skyN = Math.max(1, Math.ceil((footerBottom - lineTop) / SKY_STEP));
       const sky = new Float32Array(skyN);
       const addRect = (r: DOMRect) => {
@@ -413,10 +341,8 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       };
       // A placed artwork occupies its bands COMPLETELY (the strip is too
       // narrow to sit two drawings side by side), so later placements must
-      // skip those rows - without this, a drawing that grows into open space
-      // can slide over its neighbour's box. Tracked SEPARATELY from the
-      // content skyline: content pushes the line right, artwork rows are
-      // where the line belongs.
+      // skip those rows. Tracked SEPARATELY from the content skyline: content
+      // pushes the line right, artwork rows are where the line belongs.
       const artRows = new Uint8Array(skyN);
       const blockBandsLocal = (topLocal: number, botLocal: number) => {
         const i0 = Math.max(0, Math.floor((topLocal - 12) / SKY_STEP));
@@ -443,10 +369,14 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         id: SketchId,
         def: (typeof SKETCHES)[SketchId],
         centerDocY: number,
-        opts?: { maxW?: number; nudgeX?: number; spanH?: number },
+        opts?: { maxW?: number; nudgeX?: number; spanH?: number; rightEdge?: number },
       ): Station | null => {
         const [bw, bh] = def.vb;
-        const capW = Math.min(opts?.maxW ?? MAX_W, gapRight - CONTENT_GAP);
+        // rightEdge lets a station spill past the wave lane toward the column
+        // edge (the hands terminal: the line has left the wave for good by
+        // then, so that strip is free width)
+        const rightLim = opts?.rightEdge ?? gapRight;
+        const capW = Math.min(opts?.maxW ?? MAX_W, rightLim - CONTENT_GAP);
         // dy for a box of width w at this offset, honouring the line bounds:
         // floored so the first drawing never rises above the line's start
         // (nothing may pre-draw), and kept off the very bottom of the line
@@ -462,7 +392,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         const fitAt = (off: number, w: number) => {
           const dy = dyAt(off, w);
           if (artRowOver(dy - 12, dy + (bh * w) / bw + 12)) return 0;
-          return Math.min(capW, gapRight - skyBoundLocal(dy - 72, dy + (bh * w) / bw + 12));
+          return Math.min(capW, rightLim - skyBoundLocal(dy - 72, dy + (bh * w) / bw + 12));
         };
         let best: { s: number; dx: number; dy: number; score: number } | null = null;
         // the slide range scales with the section: tall sections (the
@@ -499,7 +429,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             const bound = skyBoundLocal(dy - 72, dy + bh * s + 12);
             // nudged boxes may slide left of the wave-hugging default, but
             // never past the skyline clearance
-            const dx = Math.max(bound, gapRight - bw * s - (opts?.nudgeX ?? 0));
+            const dx = Math.max(bound, rightLim - bw * s - (opts?.nudgeX ?? 0));
             best = { s, dx, dy, score };
           }
           if (best && off === 0 && best.s * bw >= capW - 0.5) break;
@@ -512,17 +442,10 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           entry: { x: def.entry[0] * s + dx, y: def.entry[1] * s + dy },
           exit: { x: def.exit[0] * s + dx, y: def.exit[1] * s + dy },
           s, dx, dy,
-          maskW: def.maskW * s,
           box: { x: dx, y: dy, w: bw * s, h: bh * s },
         };
       };
 
-      let aboutStation: Station | null = null;
-      let skillsStation: Station | null = null;
-      let projectsStation: Station | null = null;
-      let achievementsStation: Station | null = null;
-      let certificationsStation: Station | null = null;
-      let experienceStation: Station | null = null;
       for (const id of SECTIONS) {
         const section = document.getElementById(id);
         if (!section) continue;
@@ -536,201 +459,67 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             centerDoc = eRect.top + eRect.height / 2 + window.scrollY + 70;
           }
         }
-        // the rocket runs a touch smaller and left of the wave so more of it
-        // shows in the gap beside the project cards (user ask, 2026-07-02);
-        // the trophy and award badge match that cap for the same clearance
+        // per-artwork caps (user 2026-07-06): the rocket runs LARGE beside the
+        // project cards; the graph keeps a tighter cap for clear space on its
+        // left AND hugs the wave (negative nudge = shifted right); the trophy
+        // runs a touch smaller
         const st = place(
           id, SKETCHES[id], centerDoc,
-          id === 'projects' ? { maxW: 260, nudgeX: 24, spanH: secRect.height }
-            : id === 'achievements' || id === 'certifications' ? { maxW: 260, spanH: secRect.height }
-              : { spanH: secRect.height },
+          id === 'projects' ? { maxW: 345, nudgeX: 12, spanH: secRect.height }
+            : id === 'experience' ? { maxW: 280, nudgeX: -12, spanH: secRect.height }
+              : id === 'achievements' ? { maxW: 220, spanH: secRect.height }
+                : id === 'certifications' ? { maxW: 280, spanH: secRect.height }
+                  : { spanH: secRect.height },
         );
         if (st) {
           stations.push(st);
           blockBandsLocal(st.box.y, st.box.y + st.box.h);
-          if (id === 'about') aboutStation = st;
-          if (id === 'skills') skillsStation = st;
-          if (id === 'projects') projectsStation = st;
-          if (id === 'achievements') achievementsStation = st;
-          if (id === 'certifications') certificationsStation = st;
-          if (id === 'experience') experienceStation = st;
         }
       }
 
-      // The hands+book artwork stands VERTICALLY on the right column (user
-      // 2026-07-03, replacing the below-the-pill diagonal): the reaching hand
-      // descends from the wave at the Certifications→Contact boundary and the
-      // book-holding hand faces UP beneath it, the book anchor pinned straight
-      // below the entry at the pill row's depth. The transform is still the
-      // exact two-anchor solve (flip + rotation emerge from the anchors).
-      // THE LINE ENDS on the artwork's trailing stroke - no return.
-      let handsM: Affine | null = null;
-      let handsArtSpan: { top: number; bottom: number } | null = null;
+      // The hands+book terminal: the artwork is already the vertical
+      // composition (a hand reaching down passes the book to a hand below),
+      // so it places like any other station - below Contact's location pill,
+      // in the free strip. THE LINE ENDS on its trailing stroke - no return.
+      let handsStation: Station | null = null;
       let endLocalY = lineHeight;
       {
         const contact = document.getElementById('contact');
-        const pill = contact?.querySelector('button[title="Tap to switch location"]');
-        if (contact && pill) {
+        if (contact) {
           const cRect = contact.getBoundingClientRect();
-          const pRect = pill.getBoundingClientRect();
-          // At its current scale the give is wider than the column, so the
-          // anchors sit well LEFT of the wave (user 2026-07-03: "shift it left
-          // as it's getting cut") - this lands the reaching hand's right edge
-          // at the column boundary; the upper arm tucks behind content (zIndex
-          // 0, always under). Both x's shift together so the vertical/tilt
-          // solve (which only reads E−A) is unchanged - a pure translation.
-          const HANDS_X = waveX - 324;
-          const A = {
-            x: HANDS_X - 36,          // book anchor, 36px left of the cuff (holds the tilt)
-            // sits higher than the old pill-row depth (user 2026-07-03: start
-            // higher + bigger) - raising the book also frees the vertical room
-            // the footer guard needs to let the scale grow toward its natural k
-            y: pRect.bottom + window.scrollY + 55 - lineTop,
-          };
-          const E = { x: HANDS_X, y: cRect.top + window.scrollY - 150 - lineTop };
-          const [ax, ay] = HANDS_ART.anchorBook;
-          const [ex, ey] = HANDS_ART.anchorEntry;
-          const u = { x: -(ex - ax), y: ey - ay };           // flipped art vector A→E
-          const D = { x: E.x - A.x, y: E.y - A.y };
-          // a hair of clockwise bias so the vertical give leans just slightly
-          // (user 2026-07-03: "tilt it just a lil clockwise")
-          const th = Math.atan2(D.y, D.x) - Math.atan2(u.y, u.x) + 0.07;
-          const cos = Math.cos(th), sin = Math.sin(th);
-          const buildM = (kk: number): Affine => ({
-            a: -kk * cos, b: -kk * sin, c: -kk * sin, d: kk * cos,
-            e: A.x + kk * cos * ax + kk * sin * ay,
-            f: A.y + kk * sin * ax - kk * cos * ay,
+          const pill = contact.querySelector('button[title="Tap to switch location"]');
+          // the hands+book run LARGE (user 2026-07-06) — the terminal artwork
+          // is the line's finale, anchored BESIDE THE FORM'S LOWER HALF (the
+          // user marked the spot right of the Message field). On wide screens
+          // the strip right of the form is broad and the artwork sits exactly
+          // there; on narrow layouts the skyline shrinks it, and place()'s
+          // vertical slide search walks it up toward the free rows above the
+          // form rather than dropping it entirely.
+          const form = contact.querySelector('form');
+          const fRect = form?.getBoundingClientRect();
+          const centerDoc = fRect
+            ? fRect.top + fRect.height * 0.65 + window.scrollY
+            : pill
+              ? pill.getBoundingClientRect().bottom + window.scrollY + 330
+              : cRect.top + cRect.height * 0.85 + window.scrollY;
+          // POSITION over size (user 2026-07-06): stay at the form-side
+          // anchor (normal slide range — no wandering up to the pocket above
+          // the form) and let the box use the wave lane too (rightEdge): the
+          // line is done with the wave by here, buying ~47px of width on
+          // laptop screens where the strip beside the form runs tight.
+          handsStation = place('hands', SKETCHES.hands, centerDoc, {
+            maxW: 460, spanH: cRect.height, rightEdge: cw - 12,
           });
-          const [bx, by, bw, bh] = HANDS_ART.bbox;
-          const lowestAt = (mm: Affine) => Math.max(
-            apply(mm, HANDS_ART.threadExit[0], HANDS_ART.threadExit[1]).y,
-            ...[
-              apply(mm, bx, by), apply(mm, bx + bw, by),
-              apply(mm, bx, by + bh), apply(mm, bx + bw, by + bh),
-            ].map(p => p.y),
-          );
-          let k = Math.min(0.55, Math.max(0.26, Math.hypot(D.x, D.y) / Math.hypot(u.x, u.y)));
-          // the book stays pinned below the pill; if the artwork's lowest point
-          // (usually the trailing stroke) would reach the footer, SHRINK it
-          // until it clears rather than lifting it back into the pill row
-          const footerTop = footer.getBoundingClientRect().top + window.scrollY;
-          const room = footerTop - 24 - lineTop - A.y;
-          const off1 = (lowestAt(buildM(k)) - A.y) / k;
-          if (off1 > 0 && k * off1 > room) k = Math.max(0.26, room / off1);
-          // Free-space guard (user 2026-07-04): the give may no longer tuck
-          // under the contact content. Slide the whole artwork right into the
-          // free strip (the book anchor may leave its wide-layout x), then
-          // shrink around the anchor until BOTH edges clear - the skyline on
-          // the left, the column edge on the right. In tight quarters (the
-          // contact form fills the right half) this lands the small in-strip
-          // hand+book of the user's reference mock, so the scale floor is far
-          // below the old 0.26. (Shrinking only reduces the downward extent,
-          // so the footer guard above holds.)
-          const cornersAt = (mm: Affine) => [
-            apply(mm, bx, by), apply(mm, bx + bw, by),
-            apply(mm, bx, by + bh), apply(mm, bx + bw, by + bh),
-          ];
-          {
-            const KMIN = 0.08;
-            for (let pass = 0; pass < 3; pass++) {
-              const c = cornersAt(buildM(k));
-              const bound = skyBoundLocal(
-                Math.min(...c.map(p => p.y)), Math.max(...c.map(p => p.y)));
-              let minX = Math.min(...c.map(p => p.x));
-              let maxX = Math.max(...c.map(p => p.x));
-              // slide right into the strip as far as the column allows, and
-              // make sure the anchor itself sits inside the strip so the
-              // shrink below has somewhere to converge to
-              const shift = Math.max(
-                Math.min(Math.max(0, bound - minX), Math.max(0, cw - 8 - maxX)),
-                A.x < bound + 20 ? bound + 20 - A.x : 0,
-              );
-              if (shift > 0) { A.x += shift; minX += shift; maxX += shift; }
-              let k2 = k;
-              if (minX < bound) {
-                const offL = (A.x - minX) / k;
-                if (offL > 0) k2 = Math.min(k2, (A.x - bound) / offL);
-              }
-              if (maxX > cw - 8) {
-                const offR = (maxX - A.x) / k;
-                if (offR > 0) k2 = Math.min(k2, (cw - 8 - A.x) / offR);
-              }
-              const next = Math.max(KMIN, k2);
-              const done = next === k && shift === 0;
-              k = next;
-              if (done) break;
-            }
-          }
-          // Final verdict: the box must clear the skyline AND the column. On
-          // narrow layouts the side strip can vanish entirely (the form runs
-          // to the column edge) - then walk the box DOWN to the first free
-          // band above the footer. If none exists the hands sit this layout
-          // out and the line ends on the wave instead (better honest than
-          // hidden under the form).
-          const evalFit = () => {
-            const c = cornersAt(buildM(k));
-            const top = Math.min(...c.map(p => p.y)), bot = Math.max(...c.map(p => p.y));
-            const minX = Math.min(...c.map(p => p.x)), maxX = Math.max(...c.map(p => p.x));
-            const bound = skyBoundLocal(top, bot);
-            return {
-              top, bot, minX, maxX,
-              fits: minX >= bound - 0.5 && maxX <= cw - 8 + 0.5 && !artRowOver(top, bot),
-            };
-          };
-          let fit = evalFit();
-          if (!fit.fits) {
-            const boxH = fit.bot - fit.top, boxW = fit.maxX - fit.minX;
-            const roomBot = footerTop - 24 - lineTop;
-            for (let yTop = fit.top; yTop + boxH <= roomBot; yTop += SKY_STEP) {
-              const b2 = skyBoundLocal(yTop, yTop + boxH);
-              if (b2 <= cw - 8 - boxW - 2 && !artRowOver(yTop, yTop + boxH)) {
-                A.y += yTop - fit.top;
-                A.x += b2 + 2 - fit.minX;
-                fit = evalFit();
-                break;
-              }
-            }
-          }
-          if (!fit.fits) {
-            // no free band anywhere - skip the hands for this layout
-          } else {
-          handsM = buildM(k);
-
-          const entry = apply(handsM, HANDS_ART.threadEntry[0], HANDS_ART.threadEntry[1]);
-          const exit = apply(handsM, HANDS_ART.threadExit[0], HANDS_ART.threadExit[1]);
-          // approach along the arm's outward extension (book → cuff, continued)
-          const bookP = apply(handsM, ax, ay);
-          const dirLen = Math.hypot(entry.x - bookP.x, entry.y - bookP.y) || 1;
-          const pre = {
-            x: entry.x + ((entry.x - bookP.x) / dirLen) * 90,
-            y: entry.y + ((entry.y - bookP.y) / dirLen) * 90,
-          };
-          // the artwork's page extent decides how far the canvas must reach
-          const corners = [
-            apply(handsM, bx, by), apply(handsM, bx + bw, by),
-            apply(handsM, bx, by + bh), apply(handsM, bx + bw, by + bh),
-          ];
-          const xs = corners.map(p => p.x);
-          const ys = corners.map(p => p.y);
-          handsArtSpan = { top: Math.min(...ys), bottom: Math.max(...ys) };
-          stations.push({
-            id: 'hands',
-            d: transformPathAffine(HANDS_ART.thread, handsM),
-            entry, exit, s: k, dx: 0, dy: 0, pre,
-            maskW: HANDS_ART.maskW * k,
-            box: {
-              x: Math.min(...xs), y: handsArtSpan.top,
-              w: Math.max(...xs) - Math.min(...xs), h: handsArtSpan.bottom - handsArtSpan.top,
-            },
-          });
-          endLocalY = Math.max(exit.y, handsArtSpan.bottom) + 28;
+          if (handsStation) {
+            stations.push(handsStation);
+            blockBandsLocal(handsStation.box.y, handsStation.box.y + handsStation.box.h);
+            endLocalY = Math.max(handsStation.exit.y, handsStation.box.y + handsStation.box.h) + 28;
           }
         }
       }
       const lineEnd = Math.max(200, endLocalY);
 
-      const { d, spans } = buildPath(lineEnd, waveX, stations, !!handsM, skyBoundLocal, artRowOver, cw);
-      spansRef.current = spans;
+      const d = buildPath(lineEnd, waveX, stations, !!handsStation, skyBoundLocal, artRowOver, cw);
       if (import.meta.env.DEV) {
         // dev-only: exact placement geometry for overlap verification/tuning
         (window as unknown as Record<string, unknown>).__spDebug = {
@@ -748,18 +537,18 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
 
       track.setAttribute('d', d);
       draw.setAttribute('d', d);
-      dot.style.offsetPath = `path("${d}")`;
-      // no time-driven animation on the svg circle (the class's r-pulse
-      // would repaint the whole layer at 60fps forever)
+      // the dot is a tiny dash on the SAME geometry (see index.css) — it
+      // shares the ink's dash parameterization, so it can never drift off
+      // the drawn front the way offset-path did
+      dot.setAttribute('d', d);
+      // dash length in pathLength units scales with the REAL path length —
+      // pick it so the dash is <1px on screen and the round caps render a
+      // clean CIRCLE (a fixed 0.02 was ~6px here: a visible capsule)
+      const dotLen = dot.getTotalLength();
+      const dashU = Math.min(0.02, (0.6 / Math.max(1, dotLen)) * 100);
+      dot.style.strokeDasharray = `${dashU} ${200 - dashU}`;
       dot.style.animationName = 'spDot';
       svg.setAttribute('viewBox', `0 0 ${cw} ${lineEnd}`);
-
-      let staticStyle = document.getElementById('scroll-path-static') as HTMLStyleElement | null;
-      if (!staticStyle) {
-        staticStyle = document.createElement('style');
-        staticStyle.id = 'scroll-path-static';
-        document.head.appendChild(staticStyle);
-      }
 
       // Piecewise-remapped keyframes keep the pen ON the frontier even though
       // the drawings pack length unevenly (see remapStops). Sampling the path
@@ -774,30 +563,8 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         for (let k = 0; k <= last; k++) {
           const pct = ((k / last) * 100).toFixed(2);
           drawKf += `${pct}% { stroke-dashoffset: ${(100 * (1 - stops[k])).toFixed(3)}; } `;
-          dotKf += `${pct}% { offset-distance: ${(100 * stops[k]).toFixed(3)}%; } `;
-        }
-        // Per-artwork reveal keyframes on the SAME stops: the trace segment IS a
-        // slice of the global path, so its local progress is exact arithmetic on
-        // the global length — the ink finishes each stroke as the dot passes it.
-        const L = draw.getTotalLength();
-        const tmp = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        let revealWoven = '';
-        const names: Record<string, string> = {};
-        for (const span of spans) {
-          tmp.setAttribute('d', d.slice(0, span.from));
-          const lenStart = tmp.getTotalLength();
-          tmp.setAttribute('d', d.slice(0, span.to));
-          const lenEnd = tmp.getTotalLength();
-          if (lenEnd - lenStart < 1) continue;
-          let kf = '';
-          for (let k = 0; k <= last; k++) {
-            const pct = ((k / last) * 100).toFixed(2);
-            const local = Math.min(1, Math.max(0, (stops[k] * L - lenStart) / (lenEnd - lenStart)));
-            kf += `${pct}% { stroke-dashoffset: ${(100 * (1 - local)).toFixed(3)}; } `;
-          }
-          const name = `spRevealWoven_${span.id}`;
-          revealWoven += `@keyframes ${name} { ${kf}}\n`;
-          names[span.id] = name;
+          // dot dash-offset 200→100 tracks the ink front exactly (same stops)
+          dotKf += `${pct}% { stroke-dashoffset: ${(200 - 100 * stops[k]).toFixed(3)}; } `;
         }
         let styleEl = document.getElementById('scroll-path-remap') as HTMLStyleElement | null;
         if (!styleEl) {
@@ -806,22 +573,18 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           document.head.appendChild(styleEl);
         }
         styleEl.textContent =
-          `@keyframes spDrawWoven { ${drawKf}}\n@keyframes spDotWoven { ${dotKf}}\n${revealWoven}`;
+          `@keyframes spDrawWoven { ${drawKf}}\n@keyframes spDotWoven { ${dotKf}}`;
         draw.style.animationName = 'spDrawWoven';
         dot.style.animationName = 'spDotWoven';
-        for (const [id, name] of Object.entries(names)) {
-          const mp = maskPathRefs.current[id];
-          if (mp) mp.style.animationName = name;
-        }
       });
 
       // Anchor the element to the page (scrolls with content).
       wrap.style.top = `${Math.round(lineTop)}px`;
       wrap.style.height = `${Math.round(lineEnd)}px`;
 
-      // Draw frontier sits FRONTIER down the viewport: solid above it, unfilled
-      // below. 0% drawn when About's top hits that line, 100% when the frontier
-      // reaches the line's end inside the hands+book artwork.
+      // Draw frontier sits FRONTIER down the viewport: solid above it,
+      // unfilled below. 0% drawn when About's top hits that line, 100% when
+      // the frontier reaches the line's end inside the hands+book artwork.
       const front = vh * FRONTIER;
       // The trailing tip sits below where the frontier can ever reach (the
       // page stops scrolling first), so completion is clamped to the page's
@@ -829,73 +592,6 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       const maxScroll = footerBottom - vh;
       wrap.style.setProperty('--sp-start', `${Math.round(Math.max(0, lineTop - front))}px`);
       wrap.style.setProperty('--sp-end', `${Math.round(Math.min(lineTop + lineEnd - front, maxScroll))}px`);
-
-      if (aboutStation) artRef.current?.setAttribute('transform',
-        `translate(${n1(aboutStation.dx)} ${n1(aboutStation.dy)}) scale(${(aboutStation.s * ABOUT_ART.scale).toFixed(6)}) ` +
-        `translate(${-ABOUT_ART.offset[0]} ${-ABOUT_ART.offset[1]})`);
-      if (skillsStation) {
-        const tf = `translate(${n1(skillsStation.dx)} ${n1(skillsStation.dy)}) scale(${skillsStation.s.toFixed(5)}) ` +
-          `matrix(${SKILLS_ART.rot.join(' ')})`;
-        art3Ref.current?.querySelectorAll('[data-skills-t]').forEach(el => el.setAttribute('transform', tf));
-      }
-      if (experienceStation) art7Ref.current?.setAttribute('transform',
-        `translate(${n1(experienceStation.dx)} ${n1(experienceStation.dy)}) scale(${(experienceStation.s * EXPERIENCE_ART.scale).toFixed(6)}) ` +
-        `translate(${-EXPERIENCE_ART.offset[0]} ${-EXPERIENCE_ART.offset[1]})`);
-      if (projectsStation) art4Ref.current?.setAttribute('transform',
-        `translate(${n1(projectsStation.dx)} ${n1(projectsStation.dy)}) scale(${(projectsStation.s * PROJECTS_ART.scale).toFixed(6)}) ` +
-        `translate(${-PROJECTS_ART.offset[0]} ${-PROJECTS_ART.offset[1]})`);
-      if (achievementsStation) art5Ref.current?.setAttribute('transform',
-        `translate(${n1(achievementsStation.dx)} ${n1(achievementsStation.dy)}) scale(${(achievementsStation.s * ACHIEVEMENTS_ART.scale).toFixed(6)}) ` +
-        `translate(${-ACHIEVEMENTS_ART.offset[0]} ${-ACHIEVEMENTS_ART.offset[1]})`);
-      if (certificationsStation) art6Ref.current?.setAttribute('transform',
-        `translate(${n1(certificationsStation.dx)} ${n1(certificationsStation.dy)}) scale(${(certificationsStation.s * CERTIFICATIONS_ART.scale).toFixed(6)}) ` +
-        `translate(${-CERTIFICATIONS_ART.offset[0]} ${-CERTIFICATIONS_ART.offset[1]})`);
-      if (handsM) {
-        const m = handsM;
-        const matrixStr = `matrix(${[m.a, m.b, m.c, m.d, m.e, m.f].map(v => v.toFixed(5)).join(' ')})`;
-        art2Ref.current?.querySelectorAll('[data-hands-t]').forEach(el => el.setAttribute('transform', matrixStr));
-      }
-
-      // Pen-synced ink reveals: each artwork's accent ink sits under a mask whose
-      // content is a wide white stroke of that artwork's own trace (the same
-      // geometry welded into the global line). Fallback keyframes are LINEAR in
-      // the frontier's travel (entryY → lowest point); the idle remap below
-      // replaces them with stop-exact ones derived from the global path.
-      const artGroups: Record<string, SVGGElement | null> = {
-        about: artRef.current, skills: art3Ref.current, experience: art7Ref.current,
-        projects: art4Ref.current, achievements: art5Ref.current,
-        certifications: art6Ref.current, hands: art2Ref.current,
-      };
-      let revealKf = '';
-      const placed = new Map(stations.map(st => [st.id, st]));
-      for (const id of Object.keys(artGroups)) {
-        const g = artGroups[id];
-        const mp = maskPathRefs.current[id];
-        const st = placed.get(id);
-        if (!g || !mp) continue;
-        if (!st) { g.style.display = 'none'; continue; }
-        g.style.display = '';
-        mp.setAttribute('d', st.d);
-        mp.style.strokeWidth = `${Math.max(6, st.maskW)}`;
-        // 'hands' is not a SKETCHES id (its geometry lives in HANDS_ART), so
-        // it must NEVER index SKETCHES — branch on it first and fall back to
-        // the station's own exit if handsArtSpan is somehow absent, rather
-        // than relying on the ternary's short-circuit to dodge undefined.vb.
-        const lowest = id === 'hands'
-          ? (handsArtSpan?.bottom ?? st.exit.y)
-          : st.dy + SKETCHES[id as SketchId].vb[1] * st.s;
-        const pIn = Math.max(0, Math.min(100, (st.entry.y / lineEnd) * 100));
-        const pOut = Math.max(pIn + 0.1, Math.min(100, (lowest / lineEnd) * 100));
-        revealKf += `@keyframes spReveal_${id} { 0% { stroke-dashoffset: 100; } ` +
-          `${pIn.toFixed(2)}% { stroke-dashoffset: 100; } ` +
-          `${pOut.toFixed(2)}% { stroke-dashoffset: 0; } ` +
-          `100% { stroke-dashoffset: 0; } }\n`;
-        mp.style.animation = `spReveal_${id} linear both`;
-        mp.style.setProperty('animation-timeline', 'scroll(root block)');
-        mp.style.setProperty('animation-range-start', 'var(--sp-start)');
-        mp.style.setProperty('animation-range-end', 'var(--sp-end)');
-      }
-      staticStyle.textContent = revealKf;
     };
 
     measure();
@@ -935,207 +631,25 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
     >
       {/* overflow visible so the dot + its glow never get clipped at the path ends */}
       <svg ref={svgRef} width="100%" height="100%" fill="none" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
-        {/* The About artwork - the user's licensed drawing, pixel-faithful: a
-            faint ghost previews it, and the inked copy is drawn in by a mask
-            stroke riding the pen's own trace through it (positioned in
-            measure()). */}
-        <g ref={artRef} style={{ display: 'none' }}>
-          {/* ghost slightly dimmed so it can't stack with the line's track
-              into something that reads as already-drawn */}
-          <path d={ABOUT_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-          <g mask="url(#sp-about-reveal)">
-            <path d={ABOUT_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
-          </g>
-          <mask id="sp-about-reveal" maskUnits="userSpaceOnUse">
-            <path
-              ref={el => { maskPathRefs.current.about = el; }}
-              pathLength={100}
-              fill="none"
-              stroke="#fff"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={100}
-              strokeDashoffset={100}
-            />
-          </mask>
-        </g>
-        {/* The Skills gears artwork - rotated 90° CCW beside the Skills
-            section; ghost + a mask stroke riding the pen's trace, drawn in as
-            the pen threads its flowing line (positioned in measure()). */}
-        <g ref={art3Ref} style={{ display: 'none' }}>
-          <g data-skills-t>
-            <path d={SKILLS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-          </g>
-          <g mask="url(#sp-skills-reveal)">
-            <g data-skills-t>
-              <path d={SKILLS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
-            </g>
-          </g>
-          <mask id="sp-skills-reveal" maskUnits="userSpaceOnUse">
-            <path
-              ref={el => { maskPathRefs.current.skills = el; }}
-              pathLength={100}
-              fill="none"
-              stroke="#fff"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={100}
-              strokeDashoffset={100}
-            />
-          </mask>
-        </g>
-        {/* The Projects rocket artwork - the user's licensed take-off drawing
-            beside the Projects section; ghost + a mask stroke riding the pen's
-            trace, drawn in as the pen rides its line (positioned in
-            measure()). */}
-        <g ref={art4Ref} style={{ display: 'none' }}>
-          <path d={PROJECTS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-          <g mask="url(#sp-projects-reveal)">
-            <path d={PROJECTS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
-          </g>
-          <mask id="sp-projects-reveal" maskUnits="userSpaceOnUse">
-            <path
-              ref={el => { maskPathRefs.current.projects = el; }}
-              pathLength={100}
-              fill="none"
-              stroke="#fff"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={100}
-              strokeDashoffset={100}
-            />
-          </mask>
-        </g>
-        {/* The Achievements trophy artwork - the user's licensed drawing
-            beside the Achievements section, cropped (union of two art-space
-            rects) so its full-width ground line becomes a short run either
-            side of the pedestal; ghost + a mask stroke riding the pen's trace
-            (positioned in measure()). */}
-        <g ref={art5Ref} style={{ display: 'none' }}>
-          <g clipPath="url(#sp-achievements-art-crop)">
-            <path d={ACHIEVEMENTS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-            <g mask="url(#sp-achievements-reveal)">
-              <path d={ACHIEVEMENTS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
-            </g>
-          </g>
-          <clipPath id="sp-achievements-art-crop" clipPathUnits="userSpaceOnUse">
-            {ACHIEVEMENTS_ART.crop.map(([x, y, w, h]) => (
-              <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
-            ))}
-          </clipPath>
-          <mask id="sp-achievements-reveal" maskUnits="userSpaceOnUse">
-            <path
-              ref={el => { maskPathRefs.current.achievements = el; }}
-              pathLength={100}
-              fill="none"
-              stroke="#fff"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={100}
-              strokeDashoffset={100}
-            />
-          </mask>
-        </g>
-        {/* The Experience growth-chart artwork - the user's licensed drawing
-            beside the Experience section, cropped (one art-space rect) so its
-            full-width baseline becomes grounding stubs; ghost + a mask stroke
-            riding the pen's trace (positioned in measure()). */}
-        <g ref={art7Ref} style={{ display: 'none' }}>
-          <g clipPath="url(#sp-experience-art-crop)">
-            <path d={EXPERIENCE_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-            <g mask="url(#sp-experience-reveal)">
-              <path d={EXPERIENCE_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
-            </g>
-          </g>
-          <clipPath id="sp-experience-art-crop" clipPathUnits="userSpaceOnUse">
-            {EXPERIENCE_ART.crop.map(([x, y, w, h]) => (
-              <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
-            ))}
-          </clipPath>
-          <mask id="sp-experience-reveal" maskUnits="userSpaceOnUse">
-            <path
-              ref={el => { maskPathRefs.current.experience = el; }}
-              pathLength={100}
-              fill="none"
-              stroke="#fff"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={100}
-              strokeDashoffset={100}
-            />
-          </mask>
-        </g>
-        {/* The Certifications award artwork - the user's licensed rosette
-            badge beside the Certifications section, cropped (one art-space
-            rect) so its full-width baseline becomes short grounding stubs;
-            ghost + a mask stroke riding the pen's trace (positioned in
-            measure()). */}
-        <g ref={art6Ref} style={{ display: 'none' }}>
-          <g clipPath="url(#sp-certifications-art-crop)">
-            <path d={CERTIFICATIONS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-            <g mask="url(#sp-certifications-reveal)">
-              <path d={CERTIFICATIONS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
-            </g>
-          </g>
-          <clipPath id="sp-certifications-art-crop" clipPathUnits="userSpaceOnUse">
-            {CERTIFICATIONS_ART.crop.map(([x, y, w, h]) => (
-              <rect key={`${x}-${y}`} x={x} y={y} width={w} height={h} />
-            ))}
-          </clipPath>
-          <mask id="sp-certifications-reveal" maskUnits="userSpaceOnUse">
-            <path
-              ref={el => { maskPathRefs.current.certifications = el; }}
-              pathLength={100}
-              fill="none"
-              stroke="#fff"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={100}
-              strokeDashoffset={100}
-            />
-          </mask>
-        </g>
-        {/* The hands+book artwork - flipped/tilted below Contact's location
-            pill; ghost + a mask stroke riding the pen's trace. The page line
-            itself ENDS inside this drawing (positioned in measure()). */}
-        <g ref={art2Ref} style={{ display: 'none' }}>
-          <g data-hands-t>
-            <path d={HANDS_ART.d} fill={track} fillOpacity={0.75} stroke="none" fillRule="nonzero" />
-          </g>
-          <g mask="url(#sp-hands-reveal)">
-            <g data-hands-t>
-              <path d={HANDS_ART.d} fill={accent} stroke="none" fillRule="nonzero" />
-            </g>
-          </g>
-          <mask id="sp-hands-reveal" maskUnits="userSpaceOnUse">
-            <path
-              ref={el => { maskPathRefs.current.hands = el; }}
-              pathLength={100}
-              fill="none"
-              stroke="#fff"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeDasharray={100}
-              strokeDashoffset={100}
-            />
-          </mask>
-        </g>
         {/* faint full pre-path - shows the route AND the drawings the line will make */}
-        <path ref={trackRef} d="" stroke={track} strokeWidth={3.4} strokeLinecap="round" strokeLinejoin="round" />
+        <path ref={trackRef} d="" stroke={track} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
         {/* solid drawn portion - revealed down to the frontier as you scroll */}
-        <path ref={drawRef} className="scroll-path__draw" d="" pathLength={100} stroke={accent} strokeWidth={4} strokeLinecap="round" strokeLinejoin="round" />
-        {/* the pen's dot lives IN the svg so it repaints atomically with the
-            ink - ANY dot-like element outside this svg (composited) drifts
-            from the main-thread dash during scroll and reads as "the line
-            filled without the dot". Glow is a static filter; no time-driven
-            pulse (that repaints the whole artwork-laden layer at 60fps). */}
-        <circle
+        <path ref={drawRef} className="scroll-path__draw" d="" pathLength={100} stroke={accent} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        {/* the pen's dot: a tiny round-cap dash riding a copy of the same
+            path (d + keyframes set in measure()). Sharing the ink's dash
+            engine keeps it GLUED to the drawn front — the previous
+            offset-path circle used a different length parameterization and
+            visibly separated from the line on this dense a path. Glow is a
+            static filter; no time-driven pulse. */}
+        <path
           ref={dotRef}
           className="scroll-path__dot"
-          r={6}
-          cx={0}
-          cy={0}
-          fill={accent}
+          d=""
+          pathLength={100}
+          fill="none"
+          stroke={accent}
+          strokeWidth={13}
+          strokeLinecap="round"
           style={{ filter: `drop-shadow(0 0 6px ${accent})` }}
         />
       </svg>
