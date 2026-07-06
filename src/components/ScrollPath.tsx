@@ -199,6 +199,55 @@ const buildPath = (
   return d;
 };
 
+/* Pure-JS path geometry — NO SVGPathElement.getPointAtLength/getTotalLength.
+   Root cause of the post-refresh freeze (user 2026-07-06): on this dense a
+   woven path (~2800 cubic segments, ~112KB `d` string spanning 7 artworks),
+   each getPointAtLength() call cost ~7ms in Chromium (re-flattening cost
+   that doesn't appear to get cached between calls) — remapStops's 400 calls
+   blocked the main thread for ~2.9 SECONDS, and measure() reruns on mount,
+   resize, two settle timers, and fonts.ready, so refresh could stack several
+   such freezes. The path only ever emits M/L/C (verified against the
+   centerline generator and the connector code below), so it's flattened by
+   hand here in plain arithmetic — measured 68ms for the same 400-sample
+   query that took 2918ms via the DOM, with sub-pixel accuracy. */
+type Seg = { p0: Pt; p1: Pt; p2: Pt; p3: Pt };
+
+const parseSegments = (d: string): Seg[] => {
+  const t = d.split(/\s+/);
+  const segs: Seg[] = [];
+  let cur: Pt = { x: 0, y: 0 };
+  let i = 0;
+  const num = () => parseFloat(t[i++]);
+  while (i < t.length) {
+    const c = t[i++];
+    if (c === 'M') {
+      cur = { x: num(), y: num() };
+    } else if (c === 'L') {
+      const p3 = { x: num(), y: num() };
+      segs.push({ p0: cur, p1: cur, p2: p3, p3 }); // degenerate cubic
+      cur = p3;
+    } else if (c === 'C') {
+      const p1 = { x: num(), y: num() };
+      const p2 = { x: num(), y: num() };
+      const p3 = { x: num(), y: num() };
+      segs.push({ p0: cur, p1, p2, p3 });
+      cur = p3;
+    }
+    // any other token is unexpected for this pipeline's output — skip it
+    // rather than desync the cursor on an unrecognized command
+  }
+  return segs;
+};
+
+// cheap ORDER-OF-MAGNITUDE length (chord per segment, no subdivision) — good
+// enough for the dot's sub-pixel dash-length heuristic, and fast enough to
+// run synchronously in measure() rather than waiting for the idle callback
+const approxLen = (segs: Seg[]) => {
+  let L = 0;
+  for (const s of segs) L += Math.hypot(s.p3.x - s.p0.x, s.p3.y - s.p0.y);
+  return L;
+};
+
 /* The one-line drawings pack a LOT of path length into a narrow vertical band,
    so a linear scroll→dash mapping would let the pen draw far below (and finish
    far above) the frontier. Instead, remap: the pen may never draw below the
@@ -212,11 +261,38 @@ const buildPath = (
       the strict rule would release the whole loop in one keyframe — chunks
       of ink popping in without the dot travelling them. The cap makes the
       dot sweep every stroke visibly. */
-const remapStops = (path: SVGPathElement, lineHeight: number, steps = 140) => {
-  const L = path.getTotalLength();
+const remapStops = (segs: Seg[], lineHeight: number, steps = 140) => {
+  // flatten every cubic into SUB straight pieces, building a cumulative-length
+  // polyline once — then all 401 y-queries are a single monotonic pointer
+  // walk over that polyline (no repeated DOM geometry queries)
+  const SUB = 16;
+  const pts: Pt[] = [];
+  const cum: number[] = [0];
+  let last: Pt | null = null;
+  for (const { p0, p1, p2, p3 } of segs) {
+    for (let k = last ? 1 : 0; k <= SUB; k++) {
+      const s = k / SUB, m = 1 - s;
+      const p = {
+        x: m * m * m * p0.x + 3 * m * m * s * p1.x + 3 * m * s * s * p2.x + s * s * s * p3.x,
+        y: m * m * m * p0.y + 3 * m * m * s * p1.y + 3 * m * s * s * p2.y + s * s * s * p3.y,
+      };
+      if (last) cum.push(cum[cum.length - 1] + Math.hypot(p.x - last.x, p.y - last.y));
+      pts.push(p);
+      last = p;
+    }
+  }
+  const L = cum[cum.length - 1] || 1;
   const N = 400;
   const ys = new Float32Array(N + 1);
-  for (let i = 0; i <= N; i++) ys[i] = path.getPointAtLength((L * i) / N).y;
+  let j = 0;
+  for (let k = 0; k <= N; k++) {
+    const target = (L * k) / N;
+    while (j < cum.length - 1 && cum[j + 1] < target) j++;
+    const a = pts[j], b = pts[Math.min(j + 1, pts.length - 1)];
+    const span = cum[Math.min(j + 1, cum.length - 1)] - cum[j];
+    const f = span > 0 ? (target - cum[j]) / span : 0;
+    ys[k] = a.y + (b.y - a.y) * f;
+  }
   // gate each segment by its sampled MAX so unsampled loop-bottoms can't
   // release early (point samples alone miss tight dips by up to ~90px)
   const gate = (i: number) => Math.max(ys[i], ys[i + 1]);
@@ -369,7 +445,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         id: SketchId,
         def: (typeof SKETCHES)[SketchId],
         centerDocY: number,
-        opts?: { maxW?: number; nudgeX?: number; spanH?: number; rightEdge?: number },
+        opts?: { maxW?: number; nudgeX?: number; spanH?: number; rightEdge?: number; noSlide?: boolean; noBottomClamp?: boolean },
       ): Station | null => {
         const [bw, bh] = def.vb;
         // rightEdge lets a station spill past the wave lane toward the column
@@ -379,11 +455,15 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         const capW = Math.min(opts?.maxW ?? MAX_W, rightLim - CONTENT_GAP);
         // dy for a box of width w at this offset, honouring the line bounds:
         // floored so the first drawing never rises above the line's start
-        // (nothing may pre-draw), and kept off the very bottom of the line
-        const dyAt = (off: number, w: number) => Math.min(
-          Math.max(centerDocY + off - lineTop - (bh * w / bw) / 2, 16),
-          lineHeight - bh * (w / bw) - 24,
-        );
+        // (nothing may pre-draw), and kept off the very bottom of the
+        // PROVISIONAL line height — except for the terminal (hands), whose
+        // own bottom edge DEFINES the real final lineEnd a few lines below;
+        // clamping it against the provisional estimate is circular and was
+        // the second source of unwanted vertical drift (user 2026-07-06).
+        const dyAt = (off: number, w: number) => {
+          const floored = Math.max(centerDocY + off - lineTop - (bh * w / bw) / 2, 16);
+          return opts?.noBottomClamp ? floored : Math.min(floored, lineHeight - bh * (w / bw) - 24);
+        };
         // widest box allowed by the skyline over the band a w-wide box spans;
         // rows already holding another artwork are off-limits entirely. The
         // band extends 72px ABOVE the box: the pen needs that runway to swing
@@ -396,8 +476,11 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         };
         let best: { s: number; dx: number; dy: number; score: number } | null = null;
         // the slide range scales with the section: tall sections (the
-        // carousel) have free bands far from their midpoint
-        const maxOff = Math.max(288, Math.min(600, (opts?.spanH ?? 0) / 2));
+        // carousel) have free bands far from their midpoint. noSlide pins
+        // the anchor exactly (user 2026-07-06: "do not touch position") —
+        // whatever fits at off=0 is the honest answer, not a size/position
+        // trade the scoring function makes on its own.
+        const maxOff = opts?.noSlide ? 0 : Math.max(288, Math.min(600, (opts?.spanH ?? 0) / 2));
         const offs = [0];
         for (let o = 48; o <= maxOff; o += 48) offs.push(o, -o);
         for (const off of offs) {
@@ -503,12 +586,17 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
               ? pill.getBoundingClientRect().bottom + window.scrollY + 330
               : cRect.top + cRect.height * 0.85 + window.scrollY;
           // POSITION over size (user 2026-07-06): stay at the form-side
-          // anchor (normal slide range — no wandering up to the pocket above
-          // the form) and let the box use the wave lane too (rightEdge): the
-          // line is done with the wave by here, buying ~47px of width on
-          // laptop screens where the strip beside the form runs tight.
+          // anchor EXACTLY — noSlide disables the vertical-drift search, so
+          // the box can never trade position for extra width on its own (it
+          // silently did, up to 112px, before this was added). What fits at
+          // this fixed anchor is the honest ceiling; raising maxW past it
+          // does nothing more, because the real limit becomes the free gap
+          // between the Contact heading's text (above) and the footer
+          // (below) at this exact y — not maxW.
+          // TUNE SIZE HERE: raise/lower maxW — the skyline still shrinks it
+          // below this cap if the fixed anchor doesn't have room.
           handsStation = place('hands', SKETCHES.hands, centerDoc, {
-            maxW: 460, spanH: cRect.height, rightEdge: cw - 12,
+            maxW: 500, spanH: cRect.height, rightEdge: cw - 12, noSlide: true, noBottomClamp: true,
           });
           if (handsStation) {
             stations.push(handsStation);
@@ -541,22 +629,26 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       // shares the ink's dash parameterization, so it can never drift off
       // the drawn front the way offset-path did
       dot.setAttribute('d', d);
+      // parse once, reuse for both the (cheap) dash-length heuristic below
+      // and the (heavier, idle-deferred) remap sampling — see remapStops for
+      // why this replaced SVGPathElement.getPointAtLength entirely
+      const segs = parseSegments(d);
       // dash length in pathLength units scales with the REAL path length —
       // pick it so the dash is <1px on screen and the round caps render a
       // clean CIRCLE (a fixed 0.02 was ~6px here: a visible capsule)
-      const dotLen = dot.getTotalLength();
+      const dotLen = approxLen(segs);
       const dashU = Math.min(0.02, (0.6 / Math.max(1, dotLen)) * 100);
       dot.style.strokeDasharray = `${dashU} ${200 - dashU}`;
       dot.style.animationName = 'spDot';
       svg.setAttribute('viewBox', `0 0 ${cw} ${lineEnd}`);
 
       // Piecewise-remapped keyframes keep the pen ON the frontier even though
-      // the drawings pack length unevenly (see remapStops). Sampling the path
-      // is the expensive bit (~1ms per probe), so it runs at idle - until it
+      // the drawings pack length unevenly (see remapStops) — deferred to idle
+      // since flattening ~2800 segments still costs tens of ms; until it
       // lands, the stylesheet's linear spDraw/spDot fallbacks drive the draw.
       idleId = idle(() => {
         if (seq !== measureSeq) return; // superseded by a newer measure
-        const stops = remapStops(draw, lineEnd);
+        const stops = remapStops(segs, lineEnd);
         const last = stops.length - 1;
         let drawKf = '';
         let dotKf = '';
@@ -623,8 +715,14 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       className="scroll-path hidden lg:block"
       style={{
         position: 'absolute',
+        // TUNE HANDS+BOOK SIZE HERE, alongside the maxW below: the canvas is
+        // right-anchored (via `right` above) so its LEFT edge is what moves
+        // when width grows — the wave and every other station are placed
+        // relative to the right edge, so raising this ceiling gives the
+        // hands terminal (the only station whose own maxW exceeds this
+        // canvas's old 460px cap) more room WITHOUT moving anything else.
         right: 'clamp(0.6rem, 1.6vw, 1.9rem)',
-        width: 'min(34vw, 460px)',
+        width: 'min(40vw, 680px)',
         zIndex: 0, // behind the sections - a drawing may pass under wide content, never over it
         pointerEvents: 'none',
       }}
