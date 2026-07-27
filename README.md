@@ -1,73 +1,77 @@
-# React + TypeScript + Vite
+# resume-hero
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An animated hero section with a hanging desk lamp that switches the scene between day and night.
 
-Currently, two official plugins are available:
+> **Note:** the previous README was the unmodified `create-vite` React + TypeScript template — it documented Vite's ESLint configuration and never mentioned this project.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Overview
 
-## React Compiler
+A focused front-end experiment: one hero section, done carefully. A pull-cord lamp hangs over a desk scene, and pulling it crossfades between hand-made day and night artwork with motion driven by Framer Motion.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Small by design — two components and two images. It is a study of a single interaction rather than a full site.
 
-## Expanding the ESLint configuration
+## Features
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Interactive hanging lamp with a pull cord
+- Day/night scene transition between two artwork states
+- Framer Motion animation
+- Responsive layout
+- Tailwind CSS v4 via the Vite plugin — no PostCSS config
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Tech Stack
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+React 19 · TypeScript · Vite · Tailwind CSS 4 (`@tailwindcss/vite`) · Framer Motion 12 · ESLint 10
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Prerequisites
+
+- Node.js 18+ and npm
+
+## Installation
+
+```bash
+git clone https://github.com/Namans12/resume-hero.git
+cd resume-hero
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Usage
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+| Command | Does |
+|---|---|
+| `npm run dev` | Dev server |
+| `npm run build` | Type-check (`tsc -b`) then build |
+| `npm run preview` | Serve the build |
+| `npm run lint` | ESLint |
+
+## Project Structure
+
+```
+src/
+  main.tsx              entry point
+  App.tsx               mounts the hero
+  components/
+    HeroSection.tsx     scene layout and day/night state
+    HangingLamp.tsx     lamp and pull-cord interaction
+  assets/
+  index.css             Tailwind entry
+hero-desk-day.png       day artwork
+hero-desk-night.png     night artwork
+```
+
+## Notes
+
+- **Tailwind v4** is configured through `@tailwindcss/vite`, not `postcss.config.js`. There is no `tailwind.config.js` — v4 takes configuration in CSS
+- **Artwork is raster.** The two desk images are the largest assets and set the visual ceiling; swapping them changes the whole scene
+- **`HangingLamp.tsx` also appears in [`Portfolio_resume`](https://github.com/Namans12/Portfolio_resume)**. The two copies have drifted — this is the later version
+
+## Related Repositories
+
+| Repo | Relationship |
+|---|---|
+| [`Portfolio_resume`](https://github.com/Namans12/Portfolio_resume) | Full portfolio site; shares an earlier `HangingLamp` |
+| [`projects-library`](https://github.com/Namans12/projects-library) | Scroll-driven animation experiment in the same spirit |
+| [`Alpenglow`](https://github.com/Namans12/Alpenglow) | Real-time day/night SVG landscape — closest sibling conceptually |
