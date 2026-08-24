@@ -2,7 +2,6 @@ import React, { useEffect, useRef } from 'react';
 
 interface DottedBackgroundProps {
   isDark: boolean;
-  opacity?: number;
 }
 
 // Defaults mirrored from the polka-dot generator controls.
@@ -24,6 +23,9 @@ const CONNECT_RADIUS = SETTINGS.spacing * 0.95; // px - just under one cell
 const MAX_LINKS = 4;
 const LINE_STRENGTH = 1; // max line opacity at the cursor
 const EASE = 0.18;          // cursor-follow easing (lower = smoother/laggier)
+// Below this the eased anchor has caught up with the pointer and there's
+// nothing left to redraw, so the loop parks itself.
+const SETTLE_PX = 0.05;
 
 interface Dot { x: number; y: number; alpha: number; }
 
@@ -40,7 +42,7 @@ function hexToRgba(hex: string, alpha = 1) {
  * and continuously break/reform as the pointer moves. White dots in dark mode,
  * black dots in light mode.
  */
-const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1 }) => {
+const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dotsRef = useRef<Dot[]>([]);
   const mouseRef = useRef({ x: 0, y: 0, active: false });
@@ -53,6 +55,13 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
 
     const dotColor = isDark ? '#ffffff' : '#000000';
     let w = 0, h = 0, dpr = 1;
+    /* The static dot field never changes between resizes, but it was being
+       rebuilt stroke by stroke every single frame: ~1300 beginPath/arc/fill
+       triples plus a hexToRgba string allocation PER DOT PER FRAME. It's
+       painted once into an offscreen canvas here and blitted with a single
+       drawImage instead. */
+    const layer = document.createElement('canvas');
+    const lctx = layer.getContext('2d');
 
     // Precompute the dot field + each dot's masked base opacity.
     const buildField = () => {
@@ -89,6 +98,22 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
         }
       }
       dotsRef.current = dots;
+
+      // Bake the field once.
+      if (lctx) {
+        layer.width = w * dpr;
+        layer.height = h * dpr;
+        lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        lctx.clearRect(0, 0, w, h);
+        const radius = SETTINGS.dotSize / 2;
+        for (const dot of dots) {
+          if (dot.alpha <= 0.01) continue;
+          lctx.fillStyle = hexToRgba(dotColor, dot.alpha);
+          lctx.beginPath();
+          lctx.arc(dot.x, dot.y, radius, 0, Math.PI * 2);
+          lctx.fill();
+        }
+      }
     };
 
     const render = () => {
@@ -97,14 +122,8 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
       const { dotSize } = SETTINGS;
       const radius = dotSize / 2;
 
-      // Static dot field.
-      for (const dot of dots) {
-        if (dot.alpha <= 0.01) continue;
-        ctx.fillStyle = hexToRgba(dotColor, dot.alpha);
-        ctx.beginPath();
-        ctx.arc(dot.x, dot.y, radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      // Static dot field - one blit.
+      if (lctx) ctx.drawImage(layer, 0, 0, w, h);
 
       // Ease the anchor point toward the real cursor so lines glide rather than
       // snap as the pointer crosses between grid cells.
@@ -118,8 +137,11 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
       if (m.active) {
         const near: { dot: Dot; dist: number }[] = [];
         for (const dot of dots) {
-          const dist = Math.hypot(dot.x - s.x, dot.y - s.y);
-          if (dist <= CONNECT_RADIUS) near.push({ dot, dist });
+          // squared compare first - Math.hypot on every dot every frame was
+          // the second-biggest cost in here after the per-dot fills
+          const dx = dot.x - s.x, dy = dot.y - s.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 <= CONNECT_RADIUS * CONNECT_RADIUS) near.push({ dot, dist: Math.sqrt(d2) });
         }
         near.sort((a, b) => a.dist - b.dist);
 
@@ -145,12 +167,21 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
         }
       }
 
-      rafRef = requestAnimationFrame(render);
+      /* Park the loop once the eased anchor has caught the pointer and there
+         are no lines left to move. It used to run forever - full clear plus
+         the whole field plus the neighbour scan, every frame, for the entire
+         session, including while the texture sits at opacity 0 below the
+         hero. onMove/onLeave restart it. */
+      const restless = Math.abs(m.x - s.x) > SETTLE_PX || Math.abs(m.y - s.y) > SETTLE_PX;
+      if (m.active && restless) rafRef = requestAnimationFrame(render);
+      else rafRef = 0;
     };
 
     let rafRef = 0;
+    const kick = () => { if (!rafRef) rafRef = requestAnimationFrame(render); };
+
     buildField();
-    rafRef = requestAnimationFrame(render);
+    render(); // paint the static field once; the loop only runs while the cursor moves
 
     const onMove = (e: MouseEvent) => {
       if (!mouseRef.current.active) {
@@ -158,20 +189,44 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
         smoothRef.current.y = e.clientY;
       }
       mouseRef.current = { x: e.clientX, y: e.clientY, active: true };
+      kick();
     };
-    const onLeave = () => { mouseRef.current.active = false; };
-    const onResize = () => buildField();
+    /* `mouseout` BUBBLES, so listening for it on window fired on every
+       element boundary the pointer crossed, not just on leaving the page.
+       That flipped `active` off constantly, and the next mousemove then took
+       the !active branch and SNAPPED the eased anchor to the cursor - the
+       EASE above never actually got to do anything, and the lines blinked.
+       `mouseout` with a null relatedTarget is the real "left the window". */
+    const onLeave = (e?: MouseEvent) => {
+      if (e && e.relatedTarget !== null) return;
+      mouseRef.current.active = false;
+      kick(); // one last frame to clear the lines
+    };
+    const onBlur = () => onLeave();
+    const onResize = () => { buildField(); render(); };
+
+    if (import.meta.env.DEV) {
+      // dev-only: pointer/easing state, so the mouseout-bubbling fix and the
+      // parked-loop behaviour are observable without instrumenting a build
+      (window as unknown as Record<string, unknown>).__dotsDebug = () => ({
+        active: mouseRef.current.active,
+        mouse: { ...mouseRef.current },
+        eased: { ...smoothRef.current },
+        loopRunning: rafRef !== 0,
+        dots: dotsRef.current.length,
+      });
+    }
 
     window.addEventListener('mousemove', onMove, { passive: true });
-    window.addEventListener('mouseout', onLeave);
-    window.addEventListener('blur', onLeave);
+    document.addEventListener('mouseout', onLeave);
+    window.addEventListener('blur', onBlur);
     window.addEventListener('resize', onResize);
 
     return () => {
       cancelAnimationFrame(rafRef);
       window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseout', onLeave);
-      window.removeEventListener('blur', onLeave);
+      document.removeEventListener('mouseout', onLeave);
+      window.removeEventListener('blur', onBlur);
       window.removeEventListener('resize', onResize);
     };
   }, [isDark]);
@@ -180,8 +235,13 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark, opacity = 1
     <canvas
       ref={canvasRef}
       aria-hidden="true"
-      className="absolute top-0 left-0 pointer-events-none"
-      style={{ zIndex: 0, opacity, transition: 'opacity 0.5s ease' }}
+      /* FIXED, not absolute. The canvas is sized to the viewport and the
+         cursor is tracked in viewport coordinates (clientX/clientY), but it
+         used to be positioned at the DOCUMENT top - so the moment the page
+         scrolled, the constellation lines were drawn scrollY pixels away
+         from the actual pointer. */
+      className="fixed top-0 left-0 pointer-events-none"
+      style={{ zIndex: 0, opacity: 'var(--sp-dots, 1)' }}
     />
   );
 };

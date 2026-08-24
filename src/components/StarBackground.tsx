@@ -31,11 +31,12 @@ const G2 = field(P2, SUN_TINT);
 const G3 = field(P3, SUN_TINT);
 
 interface StarBackgroundProps {
-  opacity: number;
   isDark: boolean;
+  /** false while the hero owns the viewport - retires the whole star field */
+  active: boolean;
 }
 
-const StarBackground: React.FC<StarBackgroundProps> = ({ opacity, isDark }) => {
+const StarBackground: React.FC<StarBackgroundProps> = ({ isDark, active }) => {
   useEffect(() => {
     if (!document.getElementById('star-anim')) {
       const s = document.createElement('style');
@@ -77,8 +78,14 @@ const StarBackground: React.FC<StarBackgroundProps> = ({ opacity, isDark }) => {
         position: 'fixed',
         inset: 0,
         zIndex: -1,
-        opacity,
-        transition: 'opacity 0.5s ease',
+        // The fade is driven by App's scroll handler (see --sp-stars there) so
+        // it costs no React render. `active` is a single boolean threshold
+        // flip: content-visibility retires the ENTIRE subtree while the hero
+        // owns the screen, where 2000 box-shadows across six layers were
+        // otherwise being painted and transform-animated behind a fully
+        // transparent parent.
+        opacity: 'var(--sp-stars, 0)',
+        contentVisibility: active ? 'visible' : 'hidden',
         background,
         pointerEvents: 'none',
         overflow: 'hidden',

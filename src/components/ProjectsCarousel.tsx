@@ -75,20 +75,43 @@ const ProjectsCarousel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       <ul className="pcar-list list-none p-0 m-0" style={{ gap: 'clamp(6px, 1vw, 12px)', height: 'clamp(340px, 54vh, 500px)' }}>
         {PROJECTS.map((p, i) => (
           <li key={p.title} className="pcar-item" data-active={i === active ? '' : undefined}>
-            {/* Clicking the card just opens/pins the slide - it never navigates.
-                Only the "View on GitHub" link below opens the repo. */}
             <div
-              onClick={() => setActive(i)}
               className="pcar-card relative block w-full h-full rounded-2xl overflow-hidden"
-              style={{ border: `1px solid ${edge}`, cursor: 'pointer' }}
+              style={{ border: `1px solid ${edge}` }}
             >
-              {/* Project image - desaturated when collapsed, full colour when expanded */}
-              <img src={p.img} alt={p.title} draggable={false} className="pcar-img absolute inset-0 w-full h-full object-cover" />
+              {/* Opening/pinning a slide was a bare <div onClick>: not
+                  focusable, no key handler, so it was mouse-only. It's a real
+                  button now - a full-bleed hit layer UNDER the artwork, which
+                  keeps the "View on GitHub" anchor a sibling rather than
+                  nesting interactive content inside a button. aria-pressed
+                  says which card is currently pinned. */}
+              <button
+                type="button"
+                onClick={() => setActive(i)}
+                aria-pressed={i === active}
+                aria-label={`Show ${p.title}`}
+                className="absolute inset-0 w-full h-full p-0 border-0 bg-transparent focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+                style={{ cursor: 'pointer', zIndex: 0 }}
+              />
+
+              {/* Project image - desaturated when collapsed, full colour when
+                  expanded. Lazy + async-decoded: these sit ~4 viewports down
+                  but all four (~205KB) used to be fetched during page load.
+                  alt is empty because the card's own <h3> already names the
+                  project - a duplicate announcement adds nothing. */}
+              <img
+                src={p.img}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                draggable={false}
+                className="pcar-img absolute inset-0 w-full h-full object-cover pointer-events-none"
+              />
 
               {/* Legibility scrim */}
               <div
                 className="absolute inset-0 pointer-events-none"
-                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.55) 35%, rgba(0,0,0,0.12) 65%, transparent 100%)' }}
+                style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.55) 35%, rgba(0,0,0,0.12) 65%, transparent 100%)', zIndex: 1 }}
               />
 
               {/* Heading - rotates from vertical (collapsed strip) to horizontal (open card) */}
@@ -102,13 +125,14 @@ const ProjectsCarousel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                   letterSpacing: '0.01em',
                   textShadow: '0 1px 8px rgba(0,0,0,0.5)',
                   pointerEvents: 'none',
+                  zIndex: 2,
                 }}
               >
                 {p.title}
               </h3>
 
               {/* Detail - fades in above the heading once the card has fully opened */}
-              <div className="pcar-detail absolute flex flex-col" style={{ left: '1.25rem', right: '1.25rem', bottom: '3.6rem', pointerEvents: 'none' }}>
+              <div className="pcar-detail absolute flex flex-col" style={{ left: '1.25rem', right: '1.25rem', bottom: '3.6rem', pointerEvents: 'none', zIndex: 2 }}>
                 <span
                   className="self-start text-[0.62rem] font-semibold uppercase tracking-[0.16em] px-2.5 py-1 rounded-full"
                   style={{ background: 'rgba(255,255,255,0.94)', color: '#1e1b4b', fontFamily: font }}
@@ -144,7 +168,6 @@ const ProjectsCarousel: React.FC<{ isDark: boolean }> = ({ isDark }) => {
                   href={p.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
                   onFocus={() => setActive(i)}
                   className="pcar-link mt-4 self-start inline-flex items-center gap-2 text-sm font-semibold no-underline"
                   style={{ color: '#fff', fontFamily: font }}

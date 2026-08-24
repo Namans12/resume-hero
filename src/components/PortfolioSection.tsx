@@ -1,5 +1,5 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import ProjectsCarousel from './ProjectsCarousel';
@@ -108,6 +108,19 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
   const navItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
 
+  /* One stable callback per slot, created once. Inline `el => (refs[i] = el)`
+     arrows are a fresh identity on every render, so React detached and
+     reattached all 14 refs (calling each with null, then the element) on
+     every single re-render - which used to be once per scroll frame. */
+  const setSectionRef = useMemo(
+    () => SECTIONS.map((_, i) => (el: HTMLElement | null) => { sectionRefs.current[i] = el; }),
+    [],
+  );
+  const setNavItemRef = useMemo(
+    () => SECTIONS.map((_, i) => (el: HTMLButtonElement | null) => { navItemRefs.current[i] = el; }),
+    [],
+  );
+
   useLayoutEffect(() => {
     const n = SECTIONS.length;
     // Target values written on scroll; current values lerped toward them
@@ -158,27 +171,50 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
       }
     };
 
-    // Per-frame lerp toward targets - this is what makes sizing smooth.
+    /* Per-frame lerp toward targets - this is what makes sizing smooth. It
+       used to be an unconditional rAF: 14 style writes plus two toFixed()
+       allocations every frame for the whole session, including while the nav
+       sits at opacity 0 over the hero and long after the values converged.
+       Now it parks once every item is within a sub-pixel of its target, and
+       updateTargets() kicks it awake. */
     const SMOOTH = 0.12;
+    const EPS_SCALE = 0.0002;
+    const EPS_OPAC = 0.0015;
     let raf = 0;
     const render = () => {
+      let moving = false;
       for (let i = 0; i < n; i++) {
         const el = navItemRefs.current[i];
         if (!el) continue;
-        curScale[i] += (targetScale[i] - curScale[i]) * SMOOTH;
-        curOpac[i]  += (targetOpac[i]  - curOpac[i])  * SMOOTH;
+        const ds = targetScale[i] - curScale[i];
+        const do_ = targetOpac[i] - curOpac[i];
+        if (Math.abs(ds) < EPS_SCALE && Math.abs(do_) < EPS_OPAC) {
+          if (curScale[i] !== targetScale[i] || curOpac[i] !== targetOpac[i]) {
+            // snap the residue so the parked state is exact
+            curScale[i] = targetScale[i];
+            curOpac[i] = targetOpac[i];
+            el.style.transform = `scale(${curScale[i].toFixed(4)})`;
+            el.style.opacity = curOpac[i].toFixed(3);
+          }
+          continue;
+        }
+        moving = true;
+        curScale[i] += ds * SMOOTH;
+        curOpac[i]  += do_ * SMOOTH;
         el.style.transform = `scale(${curScale[i].toFixed(4)})`;
         el.style.opacity = curOpac[i].toFixed(3);
       }
-      raf = requestAnimationFrame(render);
+      raf = moving ? requestAnimationFrame(render) : 0;
     };
+    const kick = () => { if (!raf) raf = requestAnimationFrame(render); };
 
+    const onScrollUpdate = () => { updateTargets(); kick(); };
     const st = ScrollTrigger.create({
       trigger: rootRef.current,
       start: 'top bottom',
       end: 'bottom top',
-      onUpdate: updateTargets,
-      onRefresh: updateTargets,
+      onUpdate: onScrollUpdate,
+      onRefresh: onScrollUpdate,
     });
 
     updateTargets();
@@ -188,12 +224,12 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
       const el = navItemRefs.current[i];
       if (el) { el.style.transform = `scale(${curScale[i]})`; el.style.opacity = String(curOpac[i]); }
     }
-    raf = requestAnimationFrame(render);
-    window.addEventListener('resize', updateTargets);
+    kick();
+    window.addEventListener('resize', onScrollUpdate);
     return () => {
       st.kill();
       cancelAnimationFrame(raf);
-      window.removeEventListener('resize', updateTargets);
+      window.removeEventListener('resize', onScrollUpdate);
     };
   }, []);
 
@@ -209,6 +245,11 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
   ];
 
   return (
+    /* Every entrance animation in here is a framer-motion `whileInView`,
+       which is JS-driven and so untouched by the reduced-motion CSS rule in
+       index.css. reducedMotion="user" makes framer-motion read the OS
+       setting itself: transforms are dropped and only opacity is animated. */
+    <MotionConfig reducedMotion="user">
     <div
       ref={rootRef}
       style={{
@@ -239,7 +280,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         {SECTIONS.map((s, i) => (
           <button
             key={s.id}
-            ref={el => { navItemRefs.current[i] = el; }}
+            ref={setNavItemRef[i]}
             onClick={() => scrollTo(s.id)}
             className="cine-nav__label pointer-events-auto text-left bg-transparent border-0 p-0 focus:outline-none"
             style={{ fontSize: 'clamp(0.85rem, 1.75vw, 1.5rem)' }}
@@ -250,7 +291,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
       </nav>
 
       {/* ── Section panels ───────────────────────────────────────── */}
-      <SectionShell id="about" refCb={el => (sectionRefs.current[0] = el)}>
+      <SectionShell id="about" refCb={setSectionRef[0]}>
         <Eyebrow color={subtle}>Who I am</Eyebrow>
         <Heading color={text}>About</Heading>
         <Body color={subtle}>
@@ -331,7 +372,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         </motion.p>
       </SectionShell>
 
-      <SectionShell id="skills" refCb={el => (sectionRefs.current[1] = el)}>
+      <SectionShell id="skills" refCb={setSectionRef[1]}>
         <Eyebrow color={subtle}>What I work with</Eyebrow>
         <Heading color={text}>Skills</Heading>
         <div className="mt-8 flex flex-col gap-7" style={{ maxWidth: '44rem' }}>
@@ -362,7 +403,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         </div>
       </SectionShell>
 
-      <SectionShell id="experience" refCb={el => (sectionRefs.current[2] = el)}>
+      <SectionShell id="experience" refCb={setSectionRef[2]}>
         <Eyebrow color={subtle}>Where I&apos;ve been</Eyebrow>
         <Heading color={text}>Experience</Heading>
         <div className="mt-8 flex flex-col gap-6" style={{ maxWidth: '46rem' }}>
@@ -422,13 +463,13 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         </div>
       </SectionShell>
 
-      <SectionShell id="projects" refCb={el => (sectionRefs.current[3] = el)}>
+      <SectionShell id="projects" refCb={setSectionRef[3]}>
         <Eyebrow color={subtle}>Selected work</Eyebrow>
         <Heading color={text}>Projects</Heading>
         <ProjectsCarousel isDark={isDark} />
       </SectionShell>
 
-      <SectionShell id="achievements" refCb={el => (sectionRefs.current[4] = el)}>
+      <SectionShell id="achievements" refCb={setSectionRef[4]}>
         <Eyebrow color={subtle}>Highlights</Eyebrow>
         <Heading color={text}>Achievements</Heading>
         <div className="mt-8 grid gap-4 sm:grid-cols-2" style={{ maxWidth: '46rem' }}>
@@ -454,7 +495,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         </div>
       </SectionShell>
 
-      <SectionShell id="certifications" refCb={el => (sectionRefs.current[5] = el)}>
+      <SectionShell id="certifications" refCb={setSectionRef[5]}>
         <Eyebrow color={subtle}>Credentials</Eyebrow>
         <Heading color={text}>Certifications</Heading>
         <div className="mt-8 flex flex-col gap-4" style={{ maxWidth: '42rem' }}>
@@ -480,7 +521,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         </div>
       </SectionShell>
 
-      <SectionShell id="contact" refCb={el => (sectionRefs.current[6] = el)}>
+      <SectionShell id="contact" refCb={setSectionRef[6]}>
         <Eyebrow color={subtle}>Say hello</Eyebrow>
         <Heading color={text}>Contact</Heading>
 
@@ -588,6 +629,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         </div>
       </footer>
     </div>
+    </MotionConfig>
   );
 };
 
@@ -738,6 +780,30 @@ const LocationPill: React.FC<{
 
 /* ── Contact form (Formspree-backed) ──────────────────────────────── */
 
+type FieldName = 'name' | 'email' | 'message';
+
+// Deliberately permissive on the address: anything stricter than
+// "something@something.tld with no spaces" rejects real addresses, and the
+// endpoint verifies it properly anyway.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+const validate = (f: Record<FieldName, string>): Partial<Record<FieldName, string>> => {
+  const errs: Partial<Record<FieldName, string>> = {};
+  if (!f.name.trim()) errs.name = 'Please tell me your name.';
+  if (!f.email.trim()) errs.email = 'An email address lets me reply.';
+  else if (!EMAIL_RE.test(f.email.trim())) errs.email = 'That doesn’t look like an email address.';
+  if (!f.message.trim()) errs.message = 'Add a short message.';
+  else if (f.message.trim().length < 10) errs.message = 'A little more detail, please (10+ characters).';
+  return errs;
+};
+
+const FieldError: React.FC<{ id: string; msg?: string; isDark: boolean; font: string }> = ({ id, msg, isDark, font }) =>
+  msg ? (
+    <p id={id} className="mt-1.5 text-xs font-medium" style={{ color: isDark ? '#fca5a5' : '#dc2626', fontFamily: font, margin: '0.375rem 0 0' }}>
+      {msg}
+    </p>
+  ) : null;
+
 const ContactForm: React.FC<{
   isDark: boolean;
   text: string;
@@ -750,15 +816,38 @@ const ContactForm: React.FC<{
   const [form, setForm] = useState({ name: '', email: '', message: '' });
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FieldName, string>>>({});
 
   const inputBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(17,24,39,0.04)';
   const ring    = isDark ? 'rgba(142,162,255,0.28)' : 'rgba(79,70,229,0.20)';
 
-  const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const onChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const name = e.target.name as FieldName;
+    setForm(f => ({ ...f, [name]: e.target.value }));
+    // Editing after a send clears the stale banner: a "message is on its way"
+    // notice used to sit under a form the visitor had already started
+    // refilling, and a field error persisted after it had been corrected.
+    setStatus(prev => (prev === 'success' || prev === 'error' ? 'idle' : prev));
+    setErrorMsg('');
+    setFieldErrors(prev => (prev[name] ? { ...prev, [name]: undefined } : prev));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    /* `noValidate` turns OFF the browser's own required/type=email checks,
+       and nothing replaced them - an empty form POSTed happily. Validate
+       here instead, so the messages are styled with the rest of the page
+       rather than being native bubbles. */
+    const errs = validate(form);
+    if (Object.keys(errs).length) {
+      setFieldErrors(errs);
+      setStatus('error');
+      setErrorMsg('Please fix the highlighted fields.');
+      return;
+    }
+    setFieldErrors({});
+
     if (FORMSPREE_ENDPOINT.includes('YOUR_FORM_ID')) {
       setStatus('error');
       setErrorMsg('The contact form isn’t connected yet — add your Formspree endpoint.');
@@ -775,6 +864,7 @@ const ContactForm: React.FC<{
       if (res.ok) {
         setStatus('success');
         setForm({ name: '', email: '', message: '' });
+        setFieldErrors({});
       } else {
         const data = await res.json().catch(() => null);
         setStatus('error');
@@ -811,8 +901,11 @@ const ContactForm: React.FC<{
         <input
           id="cf-name" name="name" type="text" required autoComplete="name"
           value={form.name} onChange={onChange} placeholder="Your name"
+          aria-invalid={!!fieldErrors.name}
+          aria-describedby={fieldErrors.name ? 'cf-name-err' : undefined}
           className="contact-input w-full rounded-xl px-4 py-3 text-base" style={fieldStyle}
         />
+        <FieldError id="cf-name-err" msg={fieldErrors.name} isDark={isDark} font={font} />
       </div>
 
       <div>
@@ -820,8 +913,11 @@ const ContactForm: React.FC<{
         <input
           id="cf-email" name="email" type="email" required autoComplete="email"
           value={form.email} onChange={onChange} placeholder="your.email@example.com"
+          aria-invalid={!!fieldErrors.email}
+          aria-describedby={fieldErrors.email ? 'cf-email-err' : undefined}
           className="contact-input w-full rounded-xl px-4 py-3 text-base" style={fieldStyle}
         />
+        <FieldError id="cf-email-err" msg={fieldErrors.email} isDark={isDark} font={font} />
       </div>
 
       <div>
@@ -829,8 +925,11 @@ const ContactForm: React.FC<{
         <textarea
           id="cf-message" name="message" required rows={5}
           value={form.message} onChange={onChange} placeholder="Tell me about your project, role, or collaboration"
+          aria-invalid={!!fieldErrors.message}
+          aria-describedby={fieldErrors.message ? 'cf-message-err' : undefined}
           className="contact-input w-full rounded-xl px-4 py-3 text-base resize-y" style={fieldStyle}
         />
+        <FieldError id="cf-message-err" msg={fieldErrors.message} isDark={isDark} font={font} />
       </div>
 
       <button
@@ -842,16 +941,14 @@ const ContactForm: React.FC<{
         {status === 'submitting' ? 'Sending…' : 'Send Message'}
       </button>
 
-      {status === 'success' && (
-        <p className="text-sm font-medium" style={{ color: accent, fontFamily: font }}>
-          Thanks — your message is on its way. I&apos;ll get back to you soon.
-        </p>
-      )}
-      {status === 'error' && (
-        <p className="text-sm font-medium" style={{ color: isDark ? '#fca5a5' : '#dc2626', fontFamily: font }}>
-          {errorMsg}
-        </p>
-      )}
+      <p role="status" aria-live="polite" className="text-sm font-medium" style={{ fontFamily: font, margin: 0 }}>
+        {status === 'success' && (
+          <span style={{ color: accent }}>Thanks — your message is on its way. I&apos;ll get back to you soon.</span>
+        )}
+        {status === 'error' && (
+          <span style={{ color: isDark ? '#fca5a5' : '#dc2626' }}>{errorMsg}</span>
+        )}
+      </p>
     </form>
   );
 };

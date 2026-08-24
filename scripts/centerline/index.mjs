@@ -69,7 +69,7 @@ export function traceArtwork(spec) {
   smoothChains(g, 2);
   if (!g.edges.length) throw new Error(`[${name}] graph empty after cleanup`);
 
-  const r = route(g, entryHint, exitHint);
+  const r = route(g, entryHint, exitHint, { dirWin: Math.max(4, meanHalf * 1.5) });
   if (r.stats.unvisited > 0) throw new Error(`[${name}] ${r.stats.unvisited} skeleton edges unreached`);
 
   const localPts = r.points.map(toLocal);

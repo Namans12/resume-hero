@@ -15,6 +15,8 @@ const PULL_DIST = 12; // px the handle travels down when pulled
 const SWAY_STIFFNESS = 0.022;
 const SWAY_DAMPING   = 0.94;
 const SWAY_IMPULSE   = 3.2; // velocity kick on each toggle
+// below this the springs are visually at rest, so the loop parks itself
+const REST_EPS = 0.01;
 
 // String geometry (used to make beads sway proportionally along the cord)
 const STRING_TOP = 145;
@@ -30,30 +32,29 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
   const animationRef  = useRef<number | undefined>(undefined);
   const swayDirRef    = useRef(1); // alternate swing direction each toggle
 
-  // Keep a ref in sync so the rAF loop can read isPulled without restarting
+  /* The rAF loop reads the pull state through this ref so it never has to
+     restart. It is written SYNCHRONOUSLY alongside each setIsPulled rather
+     than from an effect: now that the loop parks itself when settled, a ref
+     that lagged the state by a commit would let the first tick see
+     target === 0, find everything already at rest, and park again before the
+     pull ever registered - the tug would silently never animate. */
   const isPulledRef = useRef(false);
-  useEffect(() => { isPulledRef.current = isPulled; }, [isPulled]);
+  const setPulled = (v: boolean) => { isPulledRef.current = v; setIsPulled(v); };
 
-  // Single persistent spring loop - runs once on mount, never restarts
+  /* Spring loop. It used to be "persistent": an unconditional rAF writing
+     seven SVG attributes EVERY frame for the whole session, long after both
+     springs had settled to zero and even while the lamp sat faded out past
+     the hero. Now it parks itself once nothing is moving and `kick()`
+     restarts it on interaction. */
   const springPos = useRef(0);
   const springVel = useRef(0);
   const swayPos   = useRef(0);
   const swayVel   = useRef(0);
+  const kickRef   = useRef<() => void>(() => {});
   useEffect(() => {
-    const tick = () => {
-      // Vertical pull spring
-      const target = isPulledRef.current ? PULL_DIST : 0;
-      const force = (target - springPos.current) * STIFFNESS;
-      springVel.current = springVel.current * DAMPING + force;
-      springPos.current += springVel.current;
-      const pos = springPos.current;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      // Horizontal sway spring (settles back to centre)
-      const swayForce = (0 - swayPos.current) * SWAY_STIFFNESS;
-      swayVel.current = swayVel.current * SWAY_DAMPING + swayForce;
-      swayPos.current += swayVel.current;
-      const sway = swayPos.current;
-
+    const paint = (pos: number, sway: number) => {
       pullStringRef.current?.setAttribute('y2', String(STRING_BOT + pos));
       pullStringRef.current?.setAttribute('x2', String(175 + sway));
 
@@ -68,25 +69,71 @@ const HangingLamp: React.FC<HangingLampProps> = ({ isDark, onThemeChange, isVisi
       if (pullHandleRef.current) {
         pullHandleRef.current.style.transform = `translate(${sway}px, ${pos}px)`;
       }
+    };
 
+    const tick = () => {
+      // Vertical pull spring
+      const target = isPulledRef.current ? PULL_DIST : 0;
+      const force = (target - springPos.current) * STIFFNESS;
+      springVel.current = springVel.current * DAMPING + force;
+      springPos.current += springVel.current;
+      const pos = springPos.current;
+
+      // Horizontal sway spring (settles back to centre)
+      const swayForce = (0 - swayPos.current) * SWAY_STIFFNESS;
+      swayVel.current = swayVel.current * SWAY_DAMPING + swayForce;
+      swayPos.current += swayVel.current;
+      const sway = swayPos.current;
+
+      paint(pos, sway);
+
+      // At rest = both springs within a sub-pixel of their target with no
+      // velocity left. Snap the residue away so the parked state is exact.
+      const settled =
+        Math.abs(target - pos) < REST_EPS && Math.abs(springVel.current) < REST_EPS &&
+        Math.abs(sway) < REST_EPS && Math.abs(swayVel.current) < REST_EPS;
+      if (settled) {
+        springPos.current = target; springVel.current = 0;
+        swayPos.current = 0; swayVel.current = 0;
+        paint(target, 0);
+        animationRef.current = undefined;
+        return;
+      }
       animationRef.current = requestAnimationFrame(tick);
     };
-    animationRef.current = requestAnimationFrame(tick);
-    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
-  }, []); // intentionally empty - persistent loop uses ref
+
+    const kick = () => {
+      if (reduceMotion) {
+        // No spring, no swing: jump straight to the rest pose.
+        springPos.current = 0; springVel.current = 0;
+        swayPos.current = 0; swayVel.current = 0;
+        paint(0, 0);
+        return;
+      }
+      if (animationRef.current === undefined) animationRef.current = requestAnimationFrame(tick);
+    };
+    kickRef.current = kick;
+
+    paint(0, 0);
+    return () => {
+      if (animationRef.current !== undefined) cancelAnimationFrame(animationRef.current);
+      animationRef.current = undefined;
+    };
+  }, []); // intentionally empty - the loop reads refs and is restarted via kickRef
 
   // Release the pull after 400 ms so spring bounces back
   useEffect(() => {
     if (!isPulled) return;
-    const t = setTimeout(() => setIsPulled(false), 400);
+    const t = setTimeout(() => { setPulled(false); kickRef.current(); }, 400);
     return () => clearTimeout(t);
   }, [isPulled]);
 
   const handleClick = () => {
-    setIsPulled(true);
+    setPulled(true);
     // Kick the thread into a gentle left/right swing, alternating each toggle
     swayVel.current += SWAY_IMPULSE * swayDirRef.current;
     swayDirRef.current *= -1;
+    kickRef.current(); // restart the parked spring loop
     onThemeChange();
   };
 

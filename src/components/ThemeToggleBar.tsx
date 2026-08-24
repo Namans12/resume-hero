@@ -8,13 +8,17 @@ const NOISE = "url(\"data:image/svg+xml,<svg viewBox='0 0 300 300' xmlns='http:/
 interface ThemeToggleBarProps {
   isDark: boolean;
   onThemeChange: () => void;
-  /** 0–1 scroll progress - drives both opacity and slide-in */
-  opacity: number;
+  /** true once the bar has faded far enough in to be worth clicking */
+  interactive: boolean;
 }
 
-const ThemeToggleBar: React.FC<ThemeToggleBarProps> = ({ isDark, onThemeChange, opacity }) => {
-  const slideY = (1 - opacity) * 20; // 20px above when hidden → 0 when fully visible
-
+/* The fade + slide ride --sp-stars (published by App's scroll handler) rather
+   than a per-frame `opacity` prop. Beyond removing a re-render per scroll
+   frame, this fixes a visual bug: the inner wrapper carried
+   `transition: opacity 0.3s` while its opacity was being rewritten every
+   frame, so the transition restarted continuously and the bar always lagged
+   the scroll. A var-driven value needs no transition at all. */
+const ThemeToggleBar: React.FC<ThemeToggleBarProps> = ({ isDark, onThemeChange, interactive }) => {
   return (
     /* Outer: fixed position + scale - no animation here */
     <div
@@ -25,15 +29,15 @@ const ThemeToggleBar: React.FC<ThemeToggleBarProps> = ({ isDark, onThemeChange, 
         zIndex: 50,
         transform: 'scale(0.46)',
         transformOrigin: 'top right',
-        pointerEvents: opacity > 0.45 ? 'auto' : 'none',
+        pointerEvents: interactive ? 'auto' : 'none',
       }}
     >
       {/* Inner: scroll-driven fade + slide */}
       <div
         style={{
-          opacity,
-          transform: `translateY(-${slideY}px)`,
-          transition: 'opacity 0.3s ease, transform 0.3s ease',
+          opacity: 'var(--sp-stars, 0)',
+          // 20px above when hidden → 0 when fully visible
+          transform: 'translateY(calc((var(--sp-stars, 0) - 1) * 20px))',
         }}
       >
         {/* Pill */}

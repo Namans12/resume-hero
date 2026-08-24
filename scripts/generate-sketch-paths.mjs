@@ -50,7 +50,12 @@ const SPEC = {
 };
 
 const VB_H = 300; // every motif normalized to a 300-unit-tall local box
-const SS = 2;     // supersample: trace at 2x so close parallel strokes thin cleanly
+// Normalize the WORKING resolution: small sources supersample up to 2x (so
+// close parallel strokes thin cleanly); oversized sources (the 2026-07-06
+// face is 1250x2550 with ~10px-thick strokes) scale DOWN toward ~1700 on the
+// long side — a uniform ~2-4px ink width is what the pipeline's junction
+// thresholds and direction windows are tuned for.
+const TARGET_DIM = 1700;
 
 const traced = {};
 const vbs = {};
@@ -58,7 +63,7 @@ const pngB64 = {};
 for (const [id, spec] of Object.entries(SPEC)) {
   const buf = readFileSync(join(ROOT, `svg/${spec.file}.png`));
   const img = decodePng(buf);
-  const bmp = inkBitmap(img, { scale: SS });
+  const bmp = inkBitmap(img, { scale: Math.min(2, TARGET_DIM / Math.max(img.w, img.h)) });
   const ls = VB_H / bmp.h;
   vbs[id] = [Math.round(bmp.w * ls), VB_H];
   pngB64[id] = buf.toString('base64');

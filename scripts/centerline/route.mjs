@@ -5,7 +5,7 @@
    Between components: a straight shortest connector (user choice 2026-07-03).
    Ends by retracing/connecting to the node nearest exitHint. */
 
-export function route(g, entryHint, exitHint) {
+export function route(g, entryHint, exitHint, { dirWin = 4 } = {}) {
   const { nodes, edges } = g;
   const byId = new Map(nodes.map(n => [n.id, n]));
   const adj = new Map(nodes.map(n => [n.id, []]));
@@ -98,12 +98,16 @@ export function route(g, entryHint, exitHint) {
      THROUGH - turning onto the crossing branch dead-ends the walk and forces
      retraces. Score each candidate by how well its outgoing direction
      continues the pen's arrival direction and take the best. */
-  const dirOver = pts => { // unit direction over the first ~4px of a point run
+  // unit direction over the first ~dirWin px of a point run. dirWin should
+  // track the source's ink width (callers pass ~1.5x the mean half-width):
+  // inside a stroke-width-sized junction cluster the skeleton wiggles, and a
+  // window smaller than the wiggle reads noise instead of heading.
+  const dirOver = pts => {
     const [x0, y0] = pts[0];
     for (let i = 1; i < pts.length; i++) {
       const dx = pts[i][0] - x0, dy = pts[i][1] - y0;
       const L = Math.hypot(dx, dy);
-      if (L >= 4 || i === pts.length - 1) return L ? [dx / L, dy / L] : null;
+      if (L >= dirWin || i === pts.length - 1) return L ? [dx / L, dy / L] : null;
     }
     return null;
   };
@@ -164,14 +168,56 @@ export function route(g, entryHint, exitHint) {
      junction. A sub-walk that dead-ends away from its junction glides back
      over already-drawn ink (invisible) so the main stroke continues
      seamlessly. */
+  /* Unvisited ink reachable through `ei` WITHOUT re-entering `cur` on another
+     edge — the size of the "pocket" behind that branch. A small pocket vs its
+     siblings means a side loop/spur that dead-ends locally; a mid-stroke X
+     floods both ways into the same sea (sizes equal → no pocket). */
+  const pocketSize = (cur, ei) => {
+    const seenE = new Set([ei]);
+    let len = edges[ei].len;
+    const start = other(edges[ei], cur);
+    const stack = [start];
+    const seenN = new Set([start]);
+    while (stack.length) {
+      const id = stack.pop();
+      if (id === cur) continue; // pocket boundary: don't expand through cur
+      for (const e2 of adj.get(id)) {
+        if (visited.has(e2) || seenE.has(e2)) continue;
+        seenE.add(e2);
+        len += edges[e2].len;
+        const o = other(edges[e2], id);
+        if (!seenN.has(o)) { seenN.add(o); stack.push(o); }
+      }
+    }
+    return len;
+  };
+
   const cover = (comp, startId, arriveEi = null) => {
     push([byId.get(startId).x, byId.get(startId).y]);
     const walk = (cur, aEi, out) => {
       for (;;) {
         const cand = adj.get(cur).filter(ei2 => !visited.has(ei2));
         if (!cand.length) return cur;
-        const paired = aEi !== null ? pairAt.get(cur)?.get(aEi) : undefined;
-        const ei = paired !== undefined && !visited.has(paired) ? paired : pickBy(cur, aEi, cand);
+        let ei;
+        if (cand.length > 1) {
+          // FILL-AS-IT-COMES (user 2026-07-06): drain a small side pocket the
+          // moment the pen passes its junction, so the line never sails past
+          // a little loop/spur and has to crawl back for it later. Only a
+          // clearly-smaller branch counts as a pocket — at a plain crossing
+          // both branches see the same sea and the artist's straight-through
+          // continuation wins as before.
+          const sizes = cand.map(c => pocketSize(cur, c));
+          const maxSz = Math.max(...sizes);
+          let pocket = -1, pocketSz = Infinity;
+          for (let k = 0; k < cand.length; k++) {
+            if (sizes[k] < maxSz * 0.5 && sizes[k] < pocketSz) { pocket = k; pocketSz = sizes[k]; }
+          }
+          if (pocket >= 0) ei = cand[pocket];
+        }
+        if (ei === undefined) {
+          const paired = aEi !== null ? pairAt.get(cur)?.get(aEi) : undefined;
+          ei = paired !== undefined && !visited.has(paired) ? paired : pickBy(cur, aEi, cand);
+        }
         visited.add(ei);
         out.push({ ei, from: cur });
         cur = other(edges[ei], cur);

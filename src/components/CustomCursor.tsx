@@ -29,6 +29,12 @@ const CustomCursor: React.FC = () => {
 
     // Only on devices that actually have a mouse - never on touch phones/tablets.
     if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+    /* A 20-dot trail under an SVG goo filter and mix-blend-mode: difference is
+       about the most expensive paint combination available, and it chases the
+       pointer continuously with an idle wiggle on top. That is exactly the
+       kind of unprompted motion prefers-reduced-motion is asking about, so
+       the whole thing simply doesn't mount - the native cursor stays. */
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const html = document.documentElement;
     html.classList.add('has-custom-cursor');
@@ -53,6 +59,9 @@ const CustomCursor: React.FC = () => {
     let idle = false;
     let timeoutID = 0;
     let raf = 0;
+    // The trail is only worth animating while the pointer is actually over the
+    // page and the window has focus.
+    let present = true;
 
     const goIdle = () => {
       idle = true;
@@ -72,6 +81,7 @@ const CustomCursor: React.FC = () => {
       mouse.x = e.clientX - W / 2;
       mouse.y = e.clientY - W / 2;
       resetIdle();
+      kick();
     };
     window.addEventListener('mousemove', onMove, { passive: true });
 
@@ -93,14 +103,43 @@ const CustomCursor: React.FC = () => {
           y += (next.y - dot.y) * TRAIL;
         }
       }
-      raf = requestAnimationFrame(render);
+      /* The idle wiggle is perpetual BY DESIGN, so this can't stop just
+         because the pointer stopped - the cluster is meant to keep drifting.
+         What it should not do is keep repainting 20 goo-filtered,
+         difference-blended spans when the pointer isn't even over the page or
+         the window is in the background, which is what the old
+         unconditional loop did for the whole session. */
+      raf = present ? requestAnimationFrame(render) : 0;
     };
-    raf = requestAnimationFrame(render);
+    const kick = () => { if (present && !raf) raf = requestAnimationFrame(render); };
+
+    const leave = () => {
+      present = false;
+      clearTimeout(timeoutID);
+      cancelAnimationFrame(raf);
+      raf = 0;
+    };
+    const enter = () => { present = true; kick(); };
+    // mouseout bubbles from every element boundary; only a null relatedTarget
+    // means the pointer actually left the page.
+    const onOut = (e: MouseEvent) => { if (e.relatedTarget === null) leave(); };
+    const onVisibility = () => { if (document.hidden) leave(); else enter(); };
+
+    document.addEventListener('mouseout', onOut);
+    window.addEventListener('blur', leave);
+    window.addEventListener('focus', enter);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    kick();
 
     return () => {
       cancelAnimationFrame(raf);
       clearTimeout(timeoutID);
       window.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseout', onOut);
+      window.removeEventListener('blur', leave);
+      window.removeEventListener('focus', enter);
+      document.removeEventListener('visibilitychange', onVisibility);
       html.classList.remove('has-custom-cursor');
       dots.forEach(d => d.el.remove());
     };

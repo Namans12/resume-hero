@@ -272,7 +272,7 @@ const remapStops = (segs: Seg[], lineHeight: number, steps = 140) => {
   for (const { p0, p1, p2, p3 } of segs) {
     for (let k = last ? 1 : 0; k <= SUB; k++) {
       const s = k / SUB, m = 1 - s;
-      const p = {
+      const p: Pt = {
         x: m * m * m * p0.x + 3 * m * m * s * p1.x + 3 * m * s * s * p2.x + s * s * s * p3.x,
         y: m * m * m * p0.y + 3 * m * m * s * p1.y + 3 * m * s * s * p2.y + s * s * s * p3.y,
       };
@@ -322,6 +322,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
   const trackRef = useRef<SVGPathElement>(null);
   const drawRef = useRef<SVGPathElement>(null);
   const dotRef = useRef<SVGPathElement>(null);
+  const haloRef = useRef<SVGPathElement>(null);
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -329,21 +330,88 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
     const track = trackRef.current;
     const draw = drawRef.current;
     const dot = dotRef.current;
-    if (!wrap || !svg || !track || !draw || !dot) return;
-    if (!window.matchMedia('(min-width: 1024px)').matches) return;
+    const halo = haloRef.current;
+    if (!wrap || !svg || !track || !draw || !dot || !halo) return;
+
+    /* The desktop gate USED TO BE a bare early return here. Evaluated once at
+       mount, it meant a window that started under 1024px never attached a
+       single listener - widening it afterwards left the whole illustration
+       permanently blank (every `d` empty, no viewBox) even though the wrapper
+       had become visible. It's a live media query now: crossing the boundary
+       either way starts or stops the whole rig. */
+    const desktop = window.matchMedia('(min-width: 1024px)');
 
     let raf = 0;
     let idleId = 0;
     let lastSig = '';
+    let lastPreSig = '';
     let measureSeq = 0;
     const idle: (cb: () => void) => number =
       'requestIdleCallback' in window
         ? cb => window.requestIdleCallback(cb, { timeout: 500 })
         : cb => window.setTimeout(cb, 80);
+
+    /* ── FLUID PEN (user 2026-07-12): a rAF driver EASES the pen toward the
+       scroll target instead of pinning it 1:1 to scrollTop. The CSS
+       scroll-timeline version snapped to each scroll frame, so any
+       main-thread hiccup (smooth-scroll lib, canvas layers) read as the pen
+       freezing then jumping. Easing absorbs those into one continuous
+       glide. The frontier remap (stops) still shapes WHERE the pen should
+       be; easing only smooths HOW it gets there. ── */
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let stops: number[] | null = null; // filled by the idle remap
+    let scrollStart = 0; // scrollY where drawing begins
+    let scrollEnd = 1;   // scrollY where drawing completes
+    let penCur = 0;      // eased path fraction actually rendered
+    let penRunning = false;
+    let disposed = false;
+    const mapProgress = (p: number) => {
+      if (!stops) return p; // linear until the remap lands
+      const last = stops.length - 1;
+      const x = Math.min(Math.max(p, 0), 1) * last;
+      const k = Math.min(last - 1, Math.floor(x));
+      return stops[k] + (stops[k + 1] - stops[k]) * (x - k);
+    };
+    const applyPen = (v: number) => {
+      draw.style.strokeDashoffset = `${100 * (1 - v)}`;
+      const o = `${200 - 100 * v}`;
+      dot.style.strokeDashoffset = o;
+      halo.style.strokeDashoffset = o;
+    };
+    const penTarget = () => mapProgress(Math.min(1, Math.max(0,
+      (window.scrollY - scrollStart) / Math.max(1, scrollEnd - scrollStart))));
+    const penTick = () => {
+      if (disposed) { penRunning = false; return; }
+      const target = penTarget();
+      const diff = target - penCur;
+      if (reduceMotion || Math.abs(diff) < 0.0004) {
+        penCur = target;
+        applyPen(penCur);
+        penRunning = false;
+        return;
+      }
+      // ease: ~16% of the remaining distance per frame — heavy scroll jerks
+      // become a satisfying chase; settles in ~0.4s after scrolling stops
+      penCur += diff * 0.16;
+      applyPen(penCur);
+      requestAnimationFrame(penTick);
+    };
+    const penKick = () => {
+      if (!penRunning) { penRunning = true; requestAnimationFrame(penTick); }
+    };
     const measure = () => {
+      if (!desktop.matches) return;
       const about = document.getElementById('about');
       const footer = document.querySelector('footer');
-      if (!about || !footer) { raf = requestAnimationFrame(measure); return; }
+      /* #about and <footer> arrive with PortfolioSection - a different lazy
+         chunk from this one - so at mount they legitimately aren't there yet.
+         Retrying via rAF alone was the whole recovery path, and rAF is frozen
+         solid in a background tab; every other trigger (load, the two settle
+         timers, fonts.ready) is one-shot. Land them all before the chunk
+         resolves and the line never drew again for the rest of the session.
+         The observer below watches for the nodes actually appearing, so the
+         rAF retry is now just a fast path. */
+      if (!about || !footer) { waitForContent(); raf = requestAnimationFrame(measure); return; }
 
       const vh = window.innerHeight;
       // Anchor the line's top to the "About" heading itself (not the section
@@ -362,6 +430,24 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       const wrapRect = wrap.getBoundingClientRect();
       const cw = Math.max(1, Math.round(wrapRect.width));
       const waveX = cw - WAVE_INSET;
+
+      /* CHEAP GATE, ahead of the expensive part. The `sig` check further down
+         also skips redundant work, but it sits AFTER the skyline walk (341
+         elements, a getComputedStyle each, plus ~89 Range rects - ~9ms) and
+         after all seven placement searches, so it saved almost nothing: a
+         resize that changed nothing still cost 4-6ms. Everything downstream
+         is a pure function of these four numbers, all of which are already in
+         hand, so compare them first. Three rects instead of 341 style reads. */
+      const preSig = `${cw}|${Math.round(lineTop)}|${Math.round(footerBottom)}|${vh}`;
+      if (preSig === lastPreSig && lastSig) {
+        // Still repaint the pen at its current scroll target, so a measure can
+        // correct it even when rAF is throttled (background tab) and the
+        // easing loop isn't running.
+        penCur = penTarget();
+        applyPen(penCur);
+        return;
+      }
+      lastPreSig = preSig;
 
       // ----- Content skyline: the rightmost VISUAL edge of every section's
       // content, sampled every SKY_STEP px down the page (document x, per
@@ -445,24 +531,34 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         id: SketchId,
         def: (typeof SKETCHES)[SketchId],
         centerDocY: number,
-        opts?: { maxW?: number; nudgeX?: number; spanH?: number; rightEdge?: number; noSlide?: boolean; noBottomClamp?: boolean },
+        opts?: { maxW?: number; minW?: number; nudgeX?: number; spanH?: number; rightEdge?: number; noSlide?: boolean; noBottomClamp?: boolean; gap?: number; bottomLimit?: number },
       ): Station | null => {
         const [bw, bh] = def.vb;
         // rightEdge lets a station spill past the wave lane toward the column
         // edge (the hands terminal: the line has left the wave for good by
-        // then, so that strip is free width)
+        // then, so that strip is free width); gap overrides CONTENT_GAP for
+        // one station (the hands run a tighter 18px against the form)
         const rightLim = opts?.rightEdge ?? gapRight;
-        const capW = Math.min(opts?.maxW ?? MAX_W, rightLim - CONTENT_GAP);
+        const minW = opts?.minW ?? MIN_W;
+        const gapAdj = CONTENT_GAP - (opts?.gap ?? CONTENT_GAP);
+        const bnd = (top: number, bot: number) => Math.max(0, skyBoundLocal(top, bot) - gapAdj);
+        const capW = Math.min(opts?.maxW ?? MAX_W, rightLim - (opts?.gap ?? CONTENT_GAP));
         // dy for a box of width w at this offset, honouring the line bounds:
         // floored so the first drawing never rises above the line's start
         // (nothing may pre-draw), and kept off the very bottom of the
         // PROVISIONAL line height — except for the terminal (hands), whose
         // own bottom edge DEFINES the real final lineEnd a few lines below;
         // clamping it against the provisional estimate is circular and was
-        // the second source of unwanted vertical drift (user 2026-07-06).
+        // a source of unwanted vertical drift (user 2026-07-06). bottomLimit
+        // (local units) is the terminal's real floor instead: the FOOTER's
+        // top, so a big box can never dive past the page's content and grow
+        // blank page below the copyright line.
         const dyAt = (off: number, w: number) => {
           const floored = Math.max(centerDocY + off - lineTop - (bh * w / bw) / 2, 16);
-          return opts?.noBottomClamp ? floored : Math.min(floored, lineHeight - bh * (w / bw) - 24);
+          const limit = opts?.bottomLimit != null
+            ? opts.bottomLimit - bh * (w / bw)
+            : opts?.noBottomClamp ? Infinity : lineHeight - bh * (w / bw) - 24;
+          return Math.min(floored, limit);
         };
         // widest box allowed by the skyline over the band a w-wide box spans;
         // rows already holding another artwork are off-limits entirely. The
@@ -472,7 +568,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         const fitAt = (off: number, w: number) => {
           const dy = dyAt(off, w);
           if (artRowOver(dy - 12, dy + (bh * w) / bw + 12)) return 0;
-          return Math.min(capW, rightLim - skyBoundLocal(dy - 72, dy + (bh * w) / bw + 12));
+          return Math.min(capW, rightLim - bnd(dy - 72, dy + (bh * w) / bw + 12));
         };
         let best: { s: number; dx: number; dy: number; score: number } | null = null;
         // the slide range scales with the section: tall sections (the
@@ -491,13 +587,13 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
             const fitW = fitAt(off, s * bw);
             if (fitW >= s * bw - 0.5) break;
             s = Math.max(0, fitW) / bw;
-            if (s * bw < MIN_W) break;
+            if (s * bw < minW) break;
           }
           // ...but it can die on a straddle a smaller box slips past (a tall
           // cap-sized box catches a blocker row the floor-sized box clears).
           // Re-probe upward from the floor with a short binary search.
-          if (s * bw < MIN_W && fitAt(off, MIN_W) >= MIN_W) {
-            let lo = MIN_W, hi = capW;
+          if (s * bw < minW && fitAt(off, minW) >= minW) {
+            let lo = minW, hi = capW;
             for (let it = 0; it < 5; it++) {
               const mid = (lo + hi) / 2;
               if (fitAt(off, mid) >= mid) lo = mid; else hi = mid;
@@ -507,9 +603,9 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           // prefer the section's own centre: a slide only wins when it buys
           // meaningfully more size (~8px of width per 64px of drift)
           const score = s * bw - Math.abs(off) * 0.125;
-          if (s * bw >= MIN_W && (!best || score > best.score)) {
+          if (s * bw >= minW && (!best || score > best.score)) {
             const dy = dyAt(off, s * bw);
-            const bound = skyBoundLocal(dy - 72, dy + bh * s + 12);
+            const bound = bnd(dy - 72, dy + bh * s + 12);
             // nudged boxes may slide left of the wave-hugging default, but
             // never past the skyline clearance
             const dx = Math.max(bound, rightLim - bw * s - (opts?.nudgeX ?? 0));
@@ -550,7 +646,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           id, SKETCHES[id], centerDoc,
           id === 'projects' ? { maxW: 345, nudgeX: 12, spanH: secRect.height }
             : id === 'experience' ? { maxW: 280, nudgeX: -12, spanH: secRect.height }
-              : id === 'achievements' ? { maxW: 220, spanH: secRect.height }
+              : id === 'achievements' ? { maxW: 220, minW: 96, spanH: secRect.height }
                 : id === 'certifications' ? { maxW: 280, spanH: secRect.height }
                   : { spanH: secRect.height },
         );
@@ -572,31 +668,26 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           const cRect = contact.getBoundingClientRect();
           const pill = contact.querySelector('button[title="Tap to switch location"]');
           // the hands+book run LARGE (user 2026-07-06) — the terminal artwork
-          // is the line's finale, anchored BESIDE THE FORM'S LOWER HALF (the
-          // user marked the spot right of the Message field). On wide screens
-          // the strip right of the form is broad and the artwork sits exactly
-          // there; on narrow layouts the skyline shrinks it, and place()'s
-          // vertical slide search walks it up toward the free rows above the
-          // form rather than dropping it entirely.
+          // is the line's finale, anchored in the tall FREE POCKET ABOVE THE
+          // FORM (between the Certifications art and the form's top row):
+          // beside/left of the wave's long empty descent, where the box can
+          // actually be big. The anchor sits ~320px above the form's top;
+          // the slide search + skyline refine the exact fit, and bottomLimit
+          // (the footer's top) still guards the floor.
           const form = contact.querySelector('form');
           const fRect = form?.getBoundingClientRect();
           const centerDoc = fRect
-            ? fRect.top + fRect.height * 0.65 + window.scrollY
+            ? fRect.top + window.scrollY - 320
             : pill
               ? pill.getBoundingClientRect().bottom + window.scrollY + 330
               : cRect.top + cRect.height * 0.85 + window.scrollY;
-          // POSITION over size (user 2026-07-06): stay at the form-side
-          // anchor EXACTLY — noSlide disables the vertical-drift search, so
-          // the box can never trade position for extra width on its own (it
-          // silently did, up to 112px, before this was added). What fits at
-          // this fixed anchor is the honest ceiling; raising maxW past it
-          // does nothing more, because the real limit becomes the free gap
-          // between the Contact heading's text (above) and the footer
-          // (below) at this exact y — not maxW.
-          // TUNE SIZE HERE: raise/lower maxW — the skyline still shrinks it
-          // below this cap if the fixed anchor doesn't have room.
+          // TUNE SIZE HERE: maxW is effectively uncapped — the real size
+          // comes from the pocket's height (box must clear the form's rows
+          // below and the certifications artwork's rows above). nudgeX
+          // shifts it left off the wave into the open band.
           handsStation = place('hands', SKETCHES.hands, centerDoc, {
-            maxW: 500, spanH: cRect.height, rightEdge: cw - 12, noSlide: true, noBottomClamp: true,
+            maxW: 2200, nudgeX: 180, spanH: Math.max(cRect.height * 2.4, window.innerHeight), rightEdge: cw - 8, gap: 18,
+            bottomLimit: footer.getBoundingClientRect().top + window.scrollY - lineTop - 16,
           });
           if (handsStation) {
             stations.push(handsStation);
@@ -606,6 +697,10 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         }
       }
       const lineEnd = Math.max(200, endLocalY);
+
+      // Content is present and measured - the appearance watcher is done.
+      contentObserver?.disconnect();
+      contentObserver = null;
 
       const d = buildPath(lineEnd, waveX, stations, !!handsStation, skyBoundLocal, artRowOver, cw);
       if (import.meta.env.DEV) {
@@ -619,16 +714,32 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       // Everything below only costs time when the geometry actually changed —
       // the d string encodes all of it, so it doubles as the change signature.
       const sig = `${cw}|${d}`;
-      if (sig === lastSig) return;
+      if (sig === lastSig) {
+        // geometry unchanged — still repaint the pen at its current scroll
+        // target so a measure can correct it even when rAF is throttled
+        // (background tab) and the easing loop isn't running
+        penCur = penTarget();
+        applyPen(penCur);
+        return;
+      }
       lastSig = sig;
       const seq = ++measureSeq;
 
       track.setAttribute('d', d);
       draw.setAttribute('d', d);
-      // the dot is a tiny dash on the SAME geometry (see index.css) — it
-      // shares the ink's dash parameterization, so it can never drift off
-      // the drawn front the way offset-path did
+      // the dot is a tiny dash on the SAME geometry — it shares the ink's
+      // dash parameterization, so it can never drift off the drawn front
+      // the way offset-path did; the halo is a wider, translucent copy that
+      // replaces the old drop-shadow filter (a filter on a path whose bbox
+      // is the whole 7000px line forced a huge intermediate surface on
+      // every frame — a large part of the scroll jank)
       dot.setAttribute('d', d);
+      halo.setAttribute('d', d);
+      // JS (penTick) owns the dash offsets now — kill the CSS scroll-driven
+      // animations so they can't fight the driver
+      draw.style.animation = 'none';
+      dot.style.animation = 'none';
+      halo.style.animation = 'none';
       // parse once, reuse for both the (cheap) dash-length heuristic below
       // and the (heavier, idle-deferred) remap sampling — see remapStops for
       // why this replaced SVGPathElement.getPointAtLength entirely
@@ -639,36 +750,8 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       const dotLen = approxLen(segs);
       const dashU = Math.min(0.02, (0.6 / Math.max(1, dotLen)) * 100);
       dot.style.strokeDasharray = `${dashU} ${200 - dashU}`;
-      dot.style.animationName = 'spDot';
+      halo.style.strokeDasharray = `${dashU} ${200 - dashU}`;
       svg.setAttribute('viewBox', `0 0 ${cw} ${lineEnd}`);
-
-      // Piecewise-remapped keyframes keep the pen ON the frontier even though
-      // the drawings pack length unevenly (see remapStops) — deferred to idle
-      // since flattening ~2800 segments still costs tens of ms; until it
-      // lands, the stylesheet's linear spDraw/spDot fallbacks drive the draw.
-      idleId = idle(() => {
-        if (seq !== measureSeq) return; // superseded by a newer measure
-        const stops = remapStops(segs, lineEnd);
-        const last = stops.length - 1;
-        let drawKf = '';
-        let dotKf = '';
-        for (let k = 0; k <= last; k++) {
-          const pct = ((k / last) * 100).toFixed(2);
-          drawKf += `${pct}% { stroke-dashoffset: ${(100 * (1 - stops[k])).toFixed(3)}; } `;
-          // dot dash-offset 200→100 tracks the ink front exactly (same stops)
-          dotKf += `${pct}% { stroke-dashoffset: ${(200 - 100 * stops[k]).toFixed(3)}; } `;
-        }
-        let styleEl = document.getElementById('scroll-path-remap') as HTMLStyleElement | null;
-        if (!styleEl) {
-          styleEl = document.createElement('style');
-          styleEl.id = 'scroll-path-remap';
-          document.head.appendChild(styleEl);
-        }
-        styleEl.textContent =
-          `@keyframes spDrawWoven { ${drawKf}}\n@keyframes spDotWoven { ${dotKf}}`;
-        draw.style.animationName = 'spDrawWoven';
-        dot.style.animationName = 'spDotWoven';
-      });
 
       // Anchor the element to the page (scrolls with content).
       wrap.style.top = `${Math.round(lineTop)}px`;
@@ -682,26 +765,100 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
       // page stops scrolling first), so completion is clamped to the page's
       // last scroll position: the pen finishes exactly as you hit the bottom.
       const maxScroll = footerBottom - vh;
-      wrap.style.setProperty('--sp-start', `${Math.round(Math.max(0, lineTop - front))}px`);
-      wrap.style.setProperty('--sp-end', `${Math.round(Math.min(lineTop + lineEnd - front, maxScroll))}px`);
+      scrollStart = Math.max(0, lineTop - front);
+      scrollEnd = Math.min(lineTop + lineEnd - front, maxScroll);
+      stops = null; // linear pacing until the remap below lands
+      // paint SYNCHRONOUSLY once — with rAF throttled (background tab) the
+      // easing loop may not run, and the drawing must still be correct
+      penCur = penTarget();
+      applyPen(penCur);
+
+      // The frontier remap keeps the pen ON the frontier even though the
+      // drawings pack length unevenly (see remapStops) — deferred to idle
+      // since flattening ~2800 segments still costs tens of ms.
+      idleId = idle(() => {
+        if (seq !== measureSeq) return; // superseded by a newer measure
+        stops = remapStops(segs, lineEnd);
+        penKick();
+      });
+    };
+
+    /* Watches for #about / <footer> being inserted, so a late lazy chunk is
+       picked up even when nothing else fires again. Self-disconnects on the
+       first successful measure. */
+    let contentObserver: MutationObserver | null = null;
+    const waitForContent = () => {
+      if (contentObserver) return;
+      contentObserver = new MutationObserver(() => {
+        if (document.getElementById('about') && document.querySelector('footer')) {
+          contentObserver?.disconnect();
+          contentObserver = null;
+          measure();
+        }
+      });
+      contentObserver.observe(document.body, { childList: true, subtree: true });
+    };
+
+    /* measure() was bound STRAIGHT to `resize`, so a window drag ran the
+       whole thing on every event. A full re-measure costs ~50ms here (the
+       skyline walk, seven placement searches, buildPath, and four ~120KB `d`
+       writes), so that was multiple dropped frames per event.
+
+       Trailing debounce: the size you stop at is the only one that matters,
+       and the line simply holds its last geometry mid-drag. A leading run is
+       still allowed when the previous measure is old enough, so a single
+       discrete resize (a window snap, a devtools open, an orientation
+       change) redraws immediately instead of waiting out the delay. */
+    const RESIZE_TRAIL = 150;
+    const RESIZE_LEAD_AFTER = 400;
+    let resizeSettle = 0;
+    let lastMeasureAt = 0;
+    const runMeasure = () => { lastMeasureAt = performance.now(); measure(); };
+    const onResize = () => {
+      clearTimeout(resizeSettle);
+      resizeSettle = window.setTimeout(runMeasure, RESIZE_TRAIL);
+      if (performance.now() - lastMeasureAt > RESIZE_LEAD_AFTER) runMeasure();
+    };
+
+    // Crossing the lg boundary: clear the canvas going down, re-measure coming up.
+    const onMediaChange = () => {
+      lastSig = '';
+      lastPreSig = '';
+      if (desktop.matches) { measure(); return; }
+      for (const el of [track, draw, dot, halo]) el.setAttribute('d', '');
     };
 
     measure();
-    window.addEventListener('resize', measure);
+    if (import.meta.env.DEV) {
+      // dev-only, alongside __spDebug: lets the cost of a measure be timed
+      // directly (the cheap pre-gate vs. a full re-measure).
+      (window as unknown as Record<string, unknown>).__spMeasure = measure;
+      (window as unknown as Record<string, unknown>).__spInvalidate =
+        () => { lastSig = ''; lastPreSig = ''; };
+    }
+    if (!desktop.matches) waitForContent(); // so widening later has content ready
+    window.addEventListener('scroll', penKick, { passive: true });
+    window.addEventListener('resize', onResize);
     window.addEventListener('load', measure);
+    desktop.addEventListener('change', onMediaChange);
     const t1 = window.setTimeout(measure, 600);  // re-measure after late layout (fonts/images)
     const t2 = window.setTimeout(measure, 2200); // lazy-loaded sections settling
     document.fonts?.ready.then(() => measure()).catch(() => {});
 
     return () => {
       cancelAnimationFrame(raf);
+      clearTimeout(resizeSettle);
       measureSeq++; // invalidate any pending idle remap
       if ('cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
       else clearTimeout(idleId);
-      window.removeEventListener('resize', measure);
+      contentObserver?.disconnect();
+      window.removeEventListener('resize', onResize);
       window.removeEventListener('load', measure);
+      desktop.removeEventListener('change', onMediaChange);
       clearTimeout(t1);
       clearTimeout(t2);
+      window.removeEventListener('scroll', penKick);
+      disposed = true; // stops any in-flight penTick chain
     };
   }, []);
 
@@ -722,7 +879,7 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         // hands terminal (the only station whose own maxW exceeds this
         // canvas's old 460px cap) more room WITHOUT moving anything else.
         right: 'clamp(0.6rem, 1.6vw, 1.9rem)',
-        width: 'min(40vw, 680px)',
+        width: 'min(46vw, 820px)',
         zIndex: 0, // behind the sections - a drawing may pass under wide content, never over it
         pointerEvents: 'none',
       }}
@@ -733,12 +890,25 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
         <path ref={trackRef} d="" stroke={track} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
         {/* solid drawn portion - revealed down to the frontier as you scroll */}
         <path ref={drawRef} className="scroll-path__draw" d="" pathLength={100} stroke={accent} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
+        {/* the pen's glow: a wider translucent dash riding the same
+            geometry as the dot — replaces the old drop-shadow filter, whose
+            intermediate surface spanned the WHOLE line's bbox and was
+            repainted every scroll frame (a major jank source) */}
+        <path
+          ref={haloRef}
+          d=""
+          pathLength={100}
+          fill="none"
+          stroke={accent}
+          strokeOpacity={0.35}
+          strokeWidth={24}
+          strokeLinecap="round"
+        />
         {/* the pen's dot: a tiny round-cap dash riding a copy of the same
-            path (d + keyframes set in measure()). Sharing the ink's dash
-            engine keeps it GLUED to the drawn front — the previous
-            offset-path circle used a different length parameterization and
-            visibly separated from the line on this dense a path. Glow is a
-            static filter; no time-driven pulse. */}
+            path (offsets driven by penTick). Sharing the ink's dash engine
+            keeps it GLUED to the drawn front — the previous offset-path
+            circle used a different length parameterization and visibly
+            separated from the line on this dense a path. */}
         <path
           ref={dotRef}
           className="scroll-path__dot"
@@ -748,7 +918,6 @@ const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
           stroke={accent}
           strokeWidth={13}
           strokeLinecap="round"
-          style={{ filter: `drop-shadow(0 0 6px ${accent})` }}
         />
       </svg>
     </div>

@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, animate } from 'framer-motion';
 import { MdOutlineRocket } from 'react-icons/md';
 
 interface BackToTopRocketProps {
@@ -9,8 +8,16 @@ interface BackToTopRocketProps {
 const TAP_MS = 600; // three-line tap animation plays over the rocket head
 const THRUST_MS = 320; // thrusters fire while the rocket holds still
 const FLY_MS = 1000; // rocket rises straight up + page scrolls, locked together
-// ease-in-out: smooth start and a gentle deceleration into the target (no sudden stop)
-const FLY_EASE: [number, number, number, number] = [0.65, 0, 0.35, 1];
+const RESET_MS = 320; // fade-out window before the transform is reset unseen
+
+// ease-in-out: smooth start and a gentle deceleration into the target.
+// Hand-rolled because this component used to pull framer-motion's `animate`
+// into the EAGER bundle purely for this one tween plus three decorative
+// keyframe spans — 133KB (44KB gzip) of critical-path JS for a control that
+// isn't even visible until you're past the About section. The keyframes now
+// live in index.css and the tween is nine lines of rAF.
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
 // Scroll position that centers the About section in the viewport.
 const aboutTarget = () => {
@@ -34,21 +41,63 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
   const [resetting, setResetting] = useState(false);
   const busyRef = useRef(false);
   const rocketRef = useRef<HTMLSpanElement>(null);
+  /* Every timer and rAF the launch sequence starts is registered here so
+     unmounting mid-flight can tear all of them down. Previously the nested
+     setTimeout chain and the tween ran on regardless, and `scrollBehavior`
+     was restored ONLY from the tween's completion callback - an interruption
+     left the whole document stuck on `scroll-behavior: auto`. */
+  const pending = useRef<{ timers: number[]; raf: number; restore: (() => void) | null }>({
+    timers: [], raf: 0, restore: null,
+  });
 
   useEffect(() => {
-    const onScroll = () => {
-      // Hidden through the hero AND the About section; the rocket appears only as
-      // About ends (moving into the next section) and stays visible from there on.
+    // The threshold needs getBoundingClientRect + offsetHeight, so computing it
+    // inside the scroll handler forced a layout on every single scroll event.
+    // It only moves when the page reflows, so it's cached and recomputed on
+    // resize instead, and the handler itself is rAF-throttled.
+    let threshold = Infinity;
+    let raf = 0;
+    const measure = () => {
       const about = document.getElementById('about');
-      const threshold = about
+      threshold = about
         ? about.getBoundingClientRect().top + window.scrollY + about.offsetHeight * 0.85
         : window.innerHeight * 1.85;
-      setVisible(window.scrollY > threshold);
     };
-    onScroll();
+    const update = () => setVisible(window.scrollY > threshold);
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(update);
+    };
+    const onResize = () => { measure(); update(); };
+
+    measure();
+    update();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    window.addEventListener('resize', onResize);
+    // #about arrives with a lazy chunk, so the first measure can land before it
+    // exists; re-measure once layout has settled.
+    const settle = window.setTimeout(onResize, 800);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(settle);
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onResize);
+    };
   }, []);
+
+  // Tear down any in-flight launch sequence on unmount.
+  useEffect(() => () => {
+    const p = pending.current;
+    p.timers.forEach(clearTimeout);
+    p.timers = [];
+    cancelAnimationFrame(p.raf);
+    p.restore?.();
+    p.restore = null;
+  }, []);
+
+  const after = (ms: number, fn: () => void) => {
+    pending.current.timers.push(window.setTimeout(fn, ms));
+  };
 
   const launch = () => {
     if (busyRef.current) return;
@@ -56,11 +105,11 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
 
     setTapping(true); // 1) hand-tap animation over the rocket head
 
-    window.setTimeout(() => {
+    after(TAP_MS, () => {
       setTapping(false);
       setThrust(true); // 2) thrusters fire - rocket holds still
 
-      window.setTimeout(() => {
+      after(THRUST_MS, () => {
         // 3) lift straight up + scroll to About, driven by one locked progress.
         //    scroll-behavior forced to 'auto' so the page tracks each frame
         //    instead of lagging behind via CSS smooth-scroll.
@@ -70,31 +119,34 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
         const html = document.documentElement;
         const prevBehavior = html.style.scrollBehavior;
         html.style.scrollBehavior = 'auto';
-        animate(0, 1, {
-          duration: FLY_MS / 1000,
-          ease: FLY_EASE,
-          onUpdate: (p) => {
-            if (rocketRef.current) rocketRef.current.style.transform = `translateY(${p * flyUp}px)`;
-            window.scrollTo(0, startY + (targetY - startY) * p);
-          },
-          onComplete: () => {
-            html.style.scrollBehavior = prevBehavior;
-          },
-        });
+        const restore = () => { html.style.scrollBehavior = prevBehavior; };
+        pending.current.restore = restore;
+
+        const t0 = performance.now();
+        const step = () => {
+          const p = Math.min(1, (performance.now() - t0) / FLY_MS);
+          const e = easeInOut(p);
+          if (rocketRef.current) rocketRef.current.style.transform = `translateY(${e * flyUp}px)`;
+          window.scrollTo(0, startY + (targetY - startY) * e);
+          if (p < 1) pending.current.raf = requestAnimationFrame(step);
+          else { restore(); pending.current.restore = null; }
+        };
+        pending.current.raf = requestAnimationFrame(step);
 
         // 4) once landed at About the rocket is off-screen: hide it, reset its
         //    transform unseen, then fade it back in at rest (no snap, no turn).
-        window.setTimeout(() => {
+        after(FLY_MS, () => {
           setThrust(false);
           setResetting(true);
-          window.setTimeout(() => {
+          after(RESET_MS, () => {
             if (rocketRef.current) rocketRef.current.style.transform = 'translateY(0px)';
             setResetting(false);
             busyRef.current = false;
-          }, 320);
-        }, FLY_MS);
-      }, THRUST_MS);
-    }, TAP_MS);
+            pending.current.timers = [];
+          });
+        });
+      });
+    });
   };
 
   const iconColor = isDark ? '#f3f4f6' : '#111827';
@@ -127,12 +179,10 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
       {/* Tap animation - three short, spaced lines popping over the rocket head together */}
       {tapping && (
         <span aria-hidden style={{ position: 'absolute', left: '50%', top: 4, width: 0, height: 0, pointerEvents: 'none' }}>
-          {[-1, 0, 1].map((dir, i) => (
-            <span key={i} style={{ position: 'absolute', left: dir * 8, top: 0, transform: `rotate(${dir * 16}deg)`, transformOrigin: 'center bottom' }}>
-              <motion.span
-                initial={{ opacity: 0, y: 4, scaleY: 0.3 }}
-                animate={{ opacity: [0, 1, 0], y: [4, -3, -9], scaleY: [0.3, 1, 0.9] }}
-                transition={{ duration: 0.5, times: [0, 0.4, 1], ease: 'easeOut' }}
+          {[-1, 0, 1].map(dir => (
+            <span key={dir} style={{ position: 'absolute', left: dir * 8, top: 0, transform: `rotate(${dir * 16}deg)`, transformOrigin: 'center bottom' }}>
+              <span
+                className="rocket-tap"
                 style={{ display: 'block', width: 2.5, height: 8, borderRadius: 2, background: iconColor, transformOrigin: 'center bottom' }}
               />
             </span>
@@ -150,15 +200,9 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
         </span>
 
         {thrust && (
-          <motion.span
-            aria-hidden
-            initial={{ opacity: 0, scaleY: 0.3 }}
-            animate={{ opacity: 1, scaleY: 1 }}
-            style={{ marginTop: -9, transformOrigin: 'top center', display: 'block' }}
-          >
-            <motion.span
-              animate={{ scaleY: [1, 1.6, 1], opacity: [0.9, 1, 0.85] }}
-              transition={{ duration: 0.22, repeat: Infinity, ease: 'easeInOut' }}
+          <span aria-hidden className="rocket-flame-in" style={{ marginTop: -9, transformOrigin: 'top center', display: 'block' }}>
+            <span
+              className="rocket-flame"
               style={{
                 display: 'block',
                 width: 11,
@@ -169,7 +213,7 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
                 filter: 'blur(0.4px)',
               }}
             />
-          </motion.span>
+          </span>
         )}
       </span>
     </button>

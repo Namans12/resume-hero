@@ -25,3 +25,8 @@ dist-ssr
 
 # Regenerable debug artifact from `generate-sketch-paths.mjs --gallery`
 sketch-gallery.html
+
+# Regenerable centerline-probe SVGs (debug output of the trace pipeline).
+# These are NOT referenced by the app; anything under public/ is copied
+# verbatim into dist/, so keeping them shipped 2.6MB of dead weight.
+public/__probe/

@@ -34,6 +34,30 @@ body {
 
 html { scroll-behavior: smooth; }
 
+/* ── Back-to-top rocket ─────────────────────────────────────────────
+   Replaces three framer-motion <motion.span>s. Keeping these in CSS is
+   what lets the rocket stay in the eager bundle without dragging
+   framer-motion (133KB raw / 44KB gzip) onto the critical path. */
+@keyframes rocketTap {
+  0%   { opacity: 0; transform: translateY(4px)  scaleY(0.3); }
+  40%  { opacity: 1; transform: translateY(-3px) scaleY(1);   }
+  100% { opacity: 0; transform: translateY(-9px) scaleY(0.9); }
+}
+.rocket-tap { animation: rocketTap 0.5s ease-out both; }
+
+@keyframes rocketFlameIn {
+  from { opacity: 0; transform: scaleY(0.3); }
+  to   { opacity: 1; transform: scaleY(1);   }
+}
+.rocket-flame-in { animation: rocketFlameIn 0.3s ease-out both; }
+
+@keyframes rocketFlame {
+  0%   { transform: scaleY(1);   opacity: 0.9;  }
+  50%  { transform: scaleY(1.6); opacity: 1;    }
+  100% { transform: scaleY(1);   opacity: 0.85; }
+}
+.rocket-flame { animation: rocketFlame 0.22s ease-in-out infinite; }
+
 /* Section padding: comfortable on mobile/tablet (set via Tailwind px-5/px-8);
    on desktop, reserve the original left gutter for the fixed side-nav so the
    web layout is unchanged. */
@@ -276,4 +300,34 @@ html.has-custom-cursor * { cursor: none !important; }
     width: max-content;
     margin: 1.1rem auto 0 !important;
   }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────
+   Only ScrollPath honoured this query before. Everything decorative here is
+   continuous, unprompted motion - the drifting star field, the lamp's
+   spring, the floating circle behind the active nav label, the day-mode
+   ambient pulse, the scroll-hint wheel and the rocket's flame - so every
+   CSS *animation* is stopped in one rule (it beats the inline
+   `animation:` shorthands the star layers and the ambient glow set).
+
+   TRANSITIONS are deliberately left running: those are responses to a
+   click or hover, not ambient movement, and killing them would make the
+   carousel and the theme toggle feel broken rather than calmer.
+
+   The JS-driven motion has its own guards: the cursor trail and dot
+   constellation don't mount, the lamp spring snaps, and PortfolioSection
+   wraps its framer-motion tree in <MotionConfig reducedMotion="user">.
+
+   `scroll-behavior: auto` matters too - a smooth-scrolled jump across
+   several viewports is exactly the large unexpected motion this query
+   asks us to avoid. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto !important; }
+
+  *, *::before, *::after { animation: none !important; }
+
+  /* These two only exist as animation keyframes, so with the animation gone
+     they'd otherwise sit visible at their un-animated state. */
+  .rocket-tap { opacity: 0 !important; }
+  .cine-nav__label.is-active { background-position: 50% 80%; background-size: 360px; }
 }

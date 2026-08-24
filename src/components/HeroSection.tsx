@@ -15,24 +15,19 @@ interface HeroSectionProps {
   isDark: boolean;
   onThemeChange: () => void;
   lampVisible?: boolean;
+  /** false once the hero has essentially faded out - unmounts its controls */
+  controlsVisible?: boolean;
 }
 
-const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVisible = true }) => {
-  // Fade the avatar/desk illustration out as the visitor scrolls down.
-  const [fade, setFade] = useState(1);
-  useEffect(() => {
-    let raf = 0;
-    const onScroll = () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const progress = window.scrollY / (window.innerHeight * 0.75);
-        setFade(Math.max(0, Math.min(1, 1 - progress)));
-      });
-    };
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf); };
-  }, []);
+/* The illustration's scroll fade rides --sp-hero, published by App's single
+   scroll handler. This component used to run a SECOND scroll listener whose
+   only job was to recompute the same 0-1 ramp into React state, re-rendering
+   the hero (lamp, plants, Explore button and all) once per scroll frame. */
+const FADE = 'var(--sp-hero, 1)';
+
+const HeroSection: React.FC<HeroSectionProps> = ({
+  isDark, onThemeChange, lampVisible = true, controlsVisible = true,
+}) => {
 
   // Cross-fade without revealing the dotted background: the incoming image sits
   // underneath at full opacity (snaps in, no transition) while the outgoing one
@@ -116,18 +111,23 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         draggable={false}
         className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
-          opacity: dayActive && !videoReady ? fade : 0,
+          opacity: dayActive && !videoReady ? FADE : 0,
           zIndex: dayActive ? 1 : 2,
           transition: dayActive ? 'none' : 'opacity 0.65s ease',
         }}
       />
+      {/* Both desk illustrations are the same scene in two palettes, and the
+          inactive one sits at opacity 0 - so a screen reader was announcing a
+          hidden image. They're decorative either way (the <h1> beside them
+          carries the meaning), so both are aria-hidden with an empty alt. */}
       <img
         src={heroNight}
-        alt="Developer at desk"
+        alt=""
+        aria-hidden="true"
         draggable={false}
         className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
-          opacity: nightActive && !videoReady ? fade : 0,
+          opacity: nightActive && !videoReady ? FADE : 0,
           zIndex: nightActive ? 1 : 2,
           transition: nightActive ? 'none' : 'opacity 0.65s ease',
         }}
@@ -149,7 +149,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         onError={stopVideo}
         className="absolute inset-x-0 bottom-0 w-full h-[58vh] object-cover object-center lg:inset-0 lg:h-full lg:object-contain lg:object-bottom select-none pointer-events-none"
         style={{
-          opacity: videoReady ? fade : 0,
+          opacity: videoReady ? FADE : 0,
           zIndex: 3,
           // Held hidden until the first frame paints, then snapped in over the
           // matching static desk so the two avatar layers never overlap; own GPU
@@ -157,7 +157,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
           transition: 'none',
           transform: 'translateZ(0)',
           backfaceVisibility: 'hidden',
-          willChange: 'transform, opacity',
+          // Only while it's actually playing. A permanent `will-change` keeps a
+          // full-viewport compositor layer alive for a clip most visitors never
+          // start, which is the exact thing the property warns against.
+          willChange: playing ? 'transform, opacity' : undefined,
         }}
       />
 
@@ -168,7 +171,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
         style={{
           left: 'clamp(3rem, 8.2vw, 9rem)',
           top: 'clamp(1.5rem, 5.3vh, 6rem)',
-          opacity: playing ? 0 : fade,
+          opacity: playing ? 0 : FADE,
           transition: 'opacity 0.45s ease',
         }}
       >
@@ -220,7 +223,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
       </div>
 
       {/* Play button ("Watch me") - shown when the clip isn't playing */}
-      {SHOW_WATCH_BUTTON && fade > 0.05 && !playing && (
+      {SHOW_WATCH_BUTTON && controlsVisible && !playing && (
         <button
           type="button"
           aria-label="Watch Me Build & Solve"
@@ -232,7 +235,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
             flex items-center justify-center w-9 h-9
             transition-transform duration-300 hover:scale-110
             focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-          style={{ ...watchBtnPos, opacity: fade }}
+          style={{ ...watchBtnPos, opacity: FADE }}
         >
           {/* Play triangle */}
           <svg width="38" height="38" viewBox="0 0 24 24" aria-hidden="true" style={{ filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.45))' }}>
@@ -264,10 +267,10 @@ const HeroSection: React.FC<HeroSectionProps> = ({ isDark, onThemeChange, lampVi
       )}
 
       {/* Explore button - at bottom of hero section to scroll into portfolio */}
-      {fade > 0.05 && (
+      {controlsVisible && (
         <div
           className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
-          style={{ opacity: fade }}
+          style={{ opacity: FADE }}
         >
           <ExploreButton
             isDark={isDark}
