@@ -7,7 +7,7 @@ import BackToTopRocket from './components/BackToTopRocket';
 import CustomCursor from './components/CustomCursor';
 // Below-the-fold; code-split so GSAP + the portfolio load after the hero paints.
 const PortfolioSection = lazy(() => import('./components/PortfolioSection'));
-// Also code-split: it carries the two embedded artworks (~30KB of path data)
+// Also code-split: it carries the seven ordered section illustrations
 // and only becomes visible from the About section down.
 const ScrollPath = lazy(() => import('./components/ScrollPath'));
 
@@ -95,10 +95,11 @@ function App() {
       raf = requestAnimationFrame(apply);
     };
     window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
     if (import.meta.env.DEV) {
       (window as unknown as Record<string, unknown>).__spScroll = apply;
     }
-    return () => { window.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf); };
+    return () => { window.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); cancelAnimationFrame(raf); };
   }, []);
 
   const toggleTheme = () => setIsDark(prev => !prev);

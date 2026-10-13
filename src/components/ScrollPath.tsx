@@ -1,927 +1,188 @@
-import { useEffect, useRef } from 'react';
-import { SKETCHES, type SketchId } from './sketchPaths';
+import { useEffect, useRef, useState } from 'react';
+import { SKETCHES, type SketchId } from './authoredSketches';
 
-/* A single one-line route anchored to the page (absolute) alongside the right
-   edge, from the About section down through every section. It SCROLLS WITH
-   the content - you only see the on-screen slice - and draws solid down to
-   the frontier of the viewport, leaving the part below unfilled. On its way
-   down, the line becomes each section's one-line illustration (traced from
-   the user's svg/*.png artworks, 2026-07-05): the pen enters the drawing at
-   its entry tail, rides every stroke of it as ONE continuous line, leaves at
-   the exit tail and flows on to the next section's drawing - one unified
-   architectural illustration. Placement is FREE-SPACE DRIVEN: a per-band
-   content skyline (rightmost painted edge, text measured as glyph boxes) is
-   the hard left boundary for every artwork AND every connector waypoint -
-   nothing may overlap or hide under a component or button; art shrinks or
-   slides vertically until it fits, or skips below MIN_W. THE LINE ENDS in
-   the hands+book artwork below Contact's location pill - it does NOT return
-   to the wave. Pure CSS scroll-driven (animation-timeline: scroll()); JS
-   only measures geometry on load/resize. Desktop only.
+// Each station gets its own scroll interval: long artwork traces must not
+// consume the next section's drawing time simply because they contain more ink.
+const STATIONS: SketchId[] = ['about', 'skills', 'experience', 'projects', 'achievements', 'certifications', 'hands'];
+type Point = { x: number; y: number };
+type Segment = { id: string; d: string; start: number; end: number };
+type Layout = { width: number; height: number; segments: Segment[] };
+const clamp = (v: number) => Math.max(0, Math.min(1, v));
 
-   LOCKED (do not change without an explicit ask): the start anchor (About
-   heading), FRONTIER, and the CSS-driven draw mechanism (pathLength=100 +
-   --sp-start/--sp-end). */
-
-// Where the drawing frontier (the end-point dot) sits down the viewport.
-// 0.5 = middle, ~0.85 = lower third (near the bottom), 1 = very bottom edge.
-const FRONTIER = 0.80;
-
-const WAVE_INSET = 39;  // wave centreline, from the wrap's right edge
-const CONTENT_GAP = 28; // hard clearance between content's right edge and any art/line
-const LINE_GAP = 20;    // clearance between a motif and the wave centreline
-const MIN_W = 130;      // skip the motif when the gap is tighter than this
-const MAX_W = 330;
-const SKY_STEP = 24;    // content-skyline sampling pitch down the page
-
-const SECTIONS: Exclude<SketchId, 'hands'>[] = [
-  'about', 'skills', 'experience', 'projects', 'achievements', 'certifications',
-];
-
-/* Connector templates: each hop between artworks is ONE cubic arc. c1/c2 are
-   control points normalized to the exit→entry chord - u along the chord, v
-   to the chord's LEFT - in chord lengths. Keyed by the station being
-   APPROACHED. SIMPLE on purpose (user 2026-07-06): one gentle S-free curve
-   per hop — no overshoot flicks, no deep sweeps — so the connectors read as
-   a calm continuation of each drawing's own exit tail. */
-const MOCK_ARC: Record<string, { c1: [number, number]; c2: [number, number] }> = {
-  about:          { c1: [0.333, -0.16], c2: [0.667, -0.16] },
-  skills:         { c1: [0.333, -0.16], c2: [0.667, -0.16] },
-  experience:     { c1: [0.333, -0.18], c2: [0.667, -0.18] },
-  projects:       { c1: [0.333, -0.14], c2: [0.667, -0.14] },
-  achievements:   { c1: [0.333, -0.14], c2: [0.667, -0.14] },
-  certifications: { c1: [0.333, -0.18], c2: [0.667, -0.18] },
-  hands:          { c1: [0.333, -0.16], c2: [0.667, -0.16] },
-};
-// a proportional bulge would balloon on long hops - cap its ABSOLUTE size
-const ARC_BULGE_MAX = 56;
-
-const n1 = (v: number) => {
-  const s = (Math.round(v * 10) / 10).toFixed(1);
-  return s.endsWith('.0') ? s.slice(0, -2) : s;
-};
-
-/* Uniformly scale + translate an absolute-command path (M/L/C/Q/A only).
-   Arc radii scale; the rotation and the large-arc/sweep FLAGS pass through
-   untouched - running flags through a number formatter emits "0.0 1.0",
-   which Chrome's path parser silently rejects. */
-const transformPath = (d: string, s: number, dx: number, dy: number) => {
-  const t = d.split(/\s+/);
-  const out: string[] = [];
-  const px = (v: string) => n1(parseFloat(v) * s + dx);
-  const py = (v: string) => n1(parseFloat(v) * s + dy);
-  let i = 0;
-  while (i < t.length) {
-    const c = t[i];
-    if (c === 'M' || c === 'L') {
-      out.push(c, px(t[i + 1]), py(t[i + 2]));
-      i += 3;
-    } else if (c === 'Q') {
-      out.push(c, px(t[i + 1]), py(t[i + 2]), px(t[i + 3]), py(t[i + 4]));
-      i += 5;
-    } else if (c === 'C') {
-      out.push(c, px(t[i + 1]), py(t[i + 2]), px(t[i + 3]), py(t[i + 4]), px(t[i + 5]), py(t[i + 6]));
-      i += 7;
-    } else if (c === 'A') {
-      out.push(c, n1(parseFloat(t[i + 1]) * s), n1(parseFloat(t[i + 2]) * s), t[i + 3], t[i + 4], t[i + 5], px(t[i + 6]), py(t[i + 7]));
-      i += 8;
-    } else {
-      i++;
-    }
-  }
-  return out.join(' ');
-};
-
-type Pt = { x: number; y: number };
-
-/* Catmull-Rom cubics through the waypoints - the flowing hand-drawn wander
-   the line takes between illustrations. */
-const flowThrough = (pts: Pt[]) => {
-  let d = '';
-  const P = [pts[0], ...pts, pts[pts.length - 1]];
-  for (let i = 1; i < P.length - 2; i++) {
-    const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
-    d += ` C ${n1(p1.x + (p2.x - p0.x) / 6)} ${n1(p1.y + (p2.y - p0.y) / 6)}`
-      + ` ${n1(p2.x - (p3.x - p1.x) / 6)} ${n1(p2.y - (p3.y - p1.y) / 6)}`
-      + ` ${n1(p2.x)} ${n1(p2.y)}`;
-  }
-  return d;
-};
-
-/* Render one template cubic from `from` to `to`. The template's control
-   points are mapped onto the chord (bulge capped at ARC_BULGE_MAX). The
-   curve is then sampled: if every sample already clears the content skyline
-   and the column edge, the EXACT cubic is emitted; otherwise the offending
-   samples are pushed right and the hop re-routes as a Catmull through them.
-   Artwork-body rows are exempt - the line is MEANT to be there. */
-const makeArc = (
-  boundLocal: (top: number, bot: number) => number,
-  artRow: (top: number, bot: number) => boolean,
-  cwLocal: number,
-) =>
-  (from: Pt, to: Pt, tpl?: { c1: [number, number]; c2: [number, number] }): string => {
-    const T = tpl ?? { c1: [0.333, -0.14] as [number, number], c2: [0.667, -0.14] as [number, number] };
-    const dx = to.x - from.x, dy = to.y - from.y;
-    const L = Math.hypot(dx, dy) || 1;
-    const t = { x: dx / L, y: dy / L };
-    const n = { x: -t.y, y: t.x };
-    const vAbs = Math.max(Math.abs(T.c1[1]), Math.abs(T.c2[1])) * L;
-    const kv = vAbs > ARC_BULGE_MAX ? ARC_BULGE_MAX / vAbs : 1;
-    const cp = (u: number, v: number): Pt => ({
-      x: from.x + t.x * u * L + n.x * v * kv * L,
-      y: from.y + t.y * u * L + n.y * v * kv * L,
-    });
-    const c1 = cp(T.c1[0], T.c1[1]);
-    const c2 = cp(T.c2[0], T.c2[1]);
-    const bez = (s: number): Pt => {
-      const m = 1 - s;
-      return {
-        x: m * m * m * from.x + 3 * m * m * s * c1.x + 3 * m * s * s * c2.x + s * s * s * to.x,
-        y: m * m * m * from.y + 3 * m * m * s * c1.y + 3 * m * s * s * c2.y + s * s * s * to.y,
-      };
-    };
-    const steps = Math.max(4, Math.round(L / 28));
-    const samples: Pt[] = [];
-    let dirty = false;
-    for (let i = 1; i < steps; i++) {
-      const p = bez(i / steps);
-      let x = p.x;
-      if (!artRow(p.y - 12, p.y + 12)) {
-        const bnd = boundLocal(p.y - 12, p.y + 12);
-        if (bnd > 0) x = Math.max(x, bnd + 16);
-      }
-      x = Math.min(x, cwLocal - 8);
-      if (Math.abs(x - p.x) > 0.5) dirty = true;
-      samples.push({ x, y: p.y });
-    }
-    if (!dirty) {
-      return ` C ${n1(c1.x)} ${n1(c1.y)} ${n1(c2.x)} ${n1(c2.y)} ${n1(to.x)} ${n1(to.y)}`;
-    }
-    return flowThrough([from, ...samples, to]);
-  };
-
-interface Station {
-  id: string;
-  d: string;
-  entry: Pt;
-  exit: Pt;
-  /** placement of the motif's local box on the line's canvas */
-  s: number;
-  dx: number;
-  dy: number;
-  /** the placed box (canvas units) - the artwork's visible extent */
-  box: { x: number; y: number; w: number; h: number };
+// Generated sketches use absolute M/C commands, with coordinate pairs only.
+function placePath(d: string, scale: number, x: number, y: number) {
+  let coordinate = 0;
+  return d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, value =>
+    String(Number(value) * scale + (coordinate++ % 2 === 0 ? x : y)));
 }
 
-/* The full route: in at the top on the wave, through each illustration, and
-   (when the terminal hands+book is placed) ENDING inside it - otherwise out
-   at the bottom on the wave. One single continuous path. */
-const buildPath = (
-  h: number, waveX: number, stations: Station[], endsOnLast: boolean,
-  boundLocal: (top: number, bot: number) => number,
-  artRow: (top: number, bot: number) => boolean, cwLocal: number,
-) => {
-  let d = `M ${n1(waveX)} 0`;
-  let cur: Pt = { x: waveX, y: 0 };
-  const arc = makeArc(boundLocal, artRow, cwLocal);
-  for (const st of stations) {
-    // one template arc straight from the previous exit into this drawing's
-    // entry - edge to edge.
-    d += arc(cur, st.entry, MOCK_ARC[st.id]);
-    // WELD the motif into the same subpath: its d starts with an M to the
-    // pen's current position, and a mid-path M (a new subpath) makes Blink
-    // lay the dash out on a different parameterization than offset-distance
-    // uses - the ink visibly runs ~2-3% of the path AHEAD of the dot. An L
-    // to the same point is a zero-length no-op that keeps one subpath.
-    d += ` ${st.d.replace(/^M\b/, 'L')}`;
-    cur = st.exit;
-  }
-  if (!endsOnLast) d += arc(cur, { x: waveX, y: h });
-  return d;
-};
-
-/* Pure-JS path geometry — NO SVGPathElement.getPointAtLength/getTotalLength.
-   Root cause of the post-refresh freeze (user 2026-07-06): on this dense a
-   woven path (~2800 cubic segments, ~112KB `d` string spanning 7 artworks),
-   each getPointAtLength() call cost ~7ms in Chromium (re-flattening cost
-   that doesn't appear to get cached between calls) — remapStops's 400 calls
-   blocked the main thread for ~2.9 SECONDS, and measure() reruns on mount,
-   resize, two settle timers, and fonts.ready, so refresh could stack several
-   such freezes. The path only ever emits M/L/C (verified against the
-   centerline generator and the connector code below), so it's flattened by
-   hand here in plain arithmetic — measured 68ms for the same 400-sample
-   query that took 2918ms via the DOM, with sub-pixel accuracy. */
-type Seg = { p0: Pt; p1: Pt; p2: Pt; p3: Pt };
-
-const parseSegments = (d: string): Seg[] => {
-  const t = d.split(/\s+/);
-  const segs: Seg[] = [];
-  let cur: Pt = { x: 0, y: 0 };
-  let i = 0;
-  const num = () => parseFloat(t[i++]);
-  while (i < t.length) {
-    const c = t[i++];
-    if (c === 'M') {
-      cur = { x: num(), y: num() };
-    } else if (c === 'L') {
-      const p3 = { x: num(), y: num() };
-      segs.push({ p0: cur, p1: cur, p2: p3, p3 }); // degenerate cubic
-      cur = p3;
-    } else if (c === 'C') {
-      const p1 = { x: num(), y: num() };
-      const p2 = { x: num(), y: num() };
-      const p3 = { x: num(), y: num() };
-      segs.push({ p0: cur, p1, p2, p3 });
-      cur = p3;
-    }
-    // any other token is unexpected for this pipeline's output — skip it
-    // rather than desync the cursor on an unrecognized command
-  }
-  return segs;
-};
-
-// cheap ORDER-OF-MAGNITUDE length (chord per segment, no subdivision) — good
-// enough for the dot's sub-pixel dash-length heuristic, and fast enough to
-// run synchronously in measure() rather than waiting for the idle callback
-const approxLen = (segs: Seg[]) => {
-  let L = 0;
-  for (const s of segs) L += Math.hypot(s.p3.x - s.p0.x, s.p3.y - s.p0.y);
-  return L;
-};
-
-/* The one-line drawings pack a LOT of path length into a narrow vertical band,
-   so a linear scroll→dash mapping would let the pen draw far below (and finish
-   far above) the frontier. Instead, remap: the pen may never draw below the
-   frontier line — it pauses at each drawing and completes it exactly as the
-   frontier passes the drawing's lowest point. Returns keyframe stops of
-   path-length fractions (0..1) for evenly spaced frontier positions.
-
-   Two rules shape the pen:
-   1. It may not draw below the frontier (the strict prefix rule).
-   2. Its speed is CAPPED: when the frontier clears a drawing's lowest dip,
-      the strict rule would release the whole loop in one keyframe — chunks
-      of ink popping in without the dot travelling them. The cap makes the
-      dot sweep every stroke visibly. */
-const remapStops = (segs: Seg[], lineHeight: number, steps = 140) => {
-  // flatten every cubic into SUB straight pieces, building a cumulative-length
-  // polyline once — then all 401 y-queries are a single monotonic pointer
-  // walk over that polyline (no repeated DOM geometry queries)
-  const SUB = 16;
-  const pts: Pt[] = [];
-  const cum: number[] = [0];
-  let last: Pt | null = null;
-  for (const { p0, p1, p2, p3 } of segs) {
-    for (let k = last ? 1 : 0; k <= SUB; k++) {
-      const s = k / SUB, m = 1 - s;
-      const p: Pt = {
-        x: m * m * m * p0.x + 3 * m * m * s * p1.x + 3 * m * s * s * p2.x + s * s * s * p3.x,
-        y: m * m * m * p0.y + 3 * m * m * s * p1.y + 3 * m * s * s * p2.y + s * s * s * p3.y,
-      };
-      if (last) cum.push(cum[cum.length - 1] + Math.hypot(p.x - last.x, p.y - last.y));
-      pts.push(p);
-      last = p;
-    }
-  }
-  const L = cum[cum.length - 1] || 1;
-  const N = 400;
-  const ys = new Float32Array(N + 1);
-  let j = 0;
-  for (let k = 0; k <= N; k++) {
-    const target = (L * k) / N;
-    while (j < cum.length - 1 && cum[j + 1] < target) j++;
-    const a = pts[j], b = pts[Math.min(j + 1, pts.length - 1)];
-    const span = cum[Math.min(j + 1, cum.length - 1)] - cum[j];
-    const f = span > 0 ? (target - cum[j]) / span : 0;
-    ys[k] = a.y + (b.y - a.y) * f;
-  }
-  // gate each segment by its sampled MAX so unsampled loop-bottoms can't
-  // release early (point samples alone miss tight dips by up to ~90px)
-  const gate = (i: number) => Math.max(ys[i], ys[i + 1]);
-  const stops: number[] = [];
-  let i = 0;
-  for (let k = 0; k <= steps; k++) {
-    const targetY = (lineHeight * k) / steps;
-    while (i < N && gate(i) <= targetY) i++;
-    stops.push(i / N);
-  }
-  const maxStep = 4.5 / steps; // ≤4.5x uniform pen speed per keyframe
-  for (let k = 1; k <= steps; k++) {
-    if (stops[k] > stops[k - 1] + maxStep) stops[k] = stops[k - 1] + maxStep;
-  }
-  // close out by the final keyframe with a catch-up ramp localized to the
-  // page's very end (the trailing tip sits below the deepest frontier)
-  for (let k = steps; k >= 0; k--) {
-    const budget = 1 - (steps - k) * maxStep;
-    if (stops[k] < budget) stops[k] = budget; else break;
-  }
-  return stops;
-};
-
-const ScrollPath: React.FC<{ isDark: boolean }> = ({ isDark }) => {
+export default function ScrollPath({ isDark }: { isDark: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const trackRef = useRef<SVGPathElement>(null);
-  const drawRef = useRef<SVGPathElement>(null);
-  const dotRef = useRef<SVGPathElement>(null);
-  const haloRef = useRef<SVGPathElement>(null);
+  const [layout, setLayout] = useState<Layout | null>(null);
 
   useEffect(() => {
-    const wrap = wrapRef.current;
-    const svg = svgRef.current;
-    const track = trackRef.current;
-    const draw = drawRef.current;
-    const dot = dotRef.current;
-    const halo = haloRef.current;
-    if (!wrap || !svg || !track || !draw || !dot || !halo) return;
-
-    /* The desktop gate USED TO BE a bare early return here. Evaluated once at
-       mount, it meant a window that started under 1024px never attached a
-       single listener - widening it afterwards left the whole illustration
-       permanently blank (every `d` empty, no viewBox) even though the wrapper
-       had become visible. It's a live media query now: crossing the boundary
-       either way starts or stops the whole rig. */
-    const desktop = window.matchMedia('(min-width: 1024px)');
-
-    let raf = 0;
-    let idleId = 0;
-    let lastSig = '';
-    let lastPreSig = '';
-    let measureSeq = 0;
-    const idle: (cb: () => void) => number =
-      'requestIdleCallback' in window
-        ? cb => window.requestIdleCallback(cb, { timeout: 500 })
-        : cb => window.setTimeout(cb, 80);
-
-    /* ── FLUID PEN (user 2026-07-12): a rAF driver EASES the pen toward the
-       scroll target instead of pinning it 1:1 to scrollTop. The CSS
-       scroll-timeline version snapped to each scroll frame, so any
-       main-thread hiccup (smooth-scroll lib, canvas layers) read as the pen
-       freezing then jumping. Easing absorbs those into one continuous
-       glide. The frontier remap (stops) still shapes WHERE the pen should
-       be; easing only smooths HOW it gets there. ── */
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let stops: number[] | null = null; // filled by the idle remap
-    let scrollStart = 0; // scrollY where drawing begins
-    let scrollEnd = 1;   // scrollY where drawing completes
-    let penCur = 0;      // eased path fraction actually rendered
-    let penRunning = false;
+    const host = wrapRef.current?.parentElement;
+    if (!host) return;
+    let frame = 0;
     let disposed = false;
-    const mapProgress = (p: number) => {
-      if (!stops) return p; // linear until the remap lands
-      const last = stops.length - 1;
-      const x = Math.min(Math.max(p, 0), 1) * last;
-      const k = Math.min(last - 1, Math.floor(x));
-      return stops[k] + (stops[k + 1] - stops[k]) * (x - k);
-    };
-    const applyPen = (v: number) => {
-      draw.style.strokeDashoffset = `${100 * (1 - v)}`;
-      const o = `${200 - 100 * v}`;
-      dot.style.strokeDashoffset = o;
-      halo.style.strokeDashoffset = o;
-    };
-    const penTarget = () => mapProgress(Math.min(1, Math.max(0,
-      (window.scrollY - scrollStart) / Math.max(1, scrollEnd - scrollStart))));
-    const penTick = () => {
-      if (disposed) { penRunning = false; return; }
-      const target = penTarget();
-      const diff = target - penCur;
-      if (reduceMotion || Math.abs(diff) < 0.0004) {
-        penCur = target;
-        applyPen(penCur);
-        penRunning = false;
-        return;
-      }
-      // ease: ~16% of the remaining distance per frame — heavy scroll jerks
-      // become a satisfying chase; settles in ~0.4s after scrolling stops
-      penCur += diff * 0.16;
-      applyPen(penCur);
-      requestAnimationFrame(penTick);
-    };
-    const penKick = () => {
-      if (!penRunning) { penRunning = true; requestAnimationFrame(penTick); }
-    };
     const measure = () => {
-      if (!desktop.matches) return;
-      const about = document.getElementById('about');
-      const footer = document.querySelector('footer');
-      /* #about and <footer> arrive with PortfolioSection - a different lazy
-         chunk from this one - so at mount they legitimately aren't there yet.
-         Retrying via rAF alone was the whole recovery path, and rAF is frozen
-         solid in a background tab; every other trigger (load, the two settle
-         timers, fonts.ready) is one-shot. Land them all before the chunk
-         resolves and the line never drew again for the rest of the session.
-         The observer below watches for the nodes actually appearing, so the
-         rAF retry is now just a fast path. */
-      if (!about || !footer) { waitForContent(); raf = requestAnimationFrame(measure); return; }
-
-      const vh = window.innerHeight;
-      // Anchor the line's top to the "About" heading itself (not the section
-      // top, which sits above the eyebrow).
-      const headingEl = about.querySelector('h2') ?? about;
-      const lineTop = headingEl.getBoundingClientRect().top + window.scrollY;
-      // Provisional extent for placement clamps: the footer-based bottom
-      // (stable - not affected by this element, unlike scrollHeight which this
-      // tall element would inflate in a measure loop). The REAL end of the
-      // line is set further down: it finishes inside the hands+book artwork.
-      const footerBottom = footer.getBoundingClientRect().bottom + window.scrollY;
-      const lineHeight = Math.max(200, footerBottom - vh * (1 - FRONTIER) - lineTop);
-
-      // Use the element's ACTUAL pixel width as the viewBox width so the box
-      // maps 1:1 on both axes (preserveAspectRatio="none") and nothing distorts.
-      const wrapRect = wrap.getBoundingClientRect();
-      const cw = Math.max(1, Math.round(wrapRect.width));
-      const waveX = cw - WAVE_INSET;
-
-      /* CHEAP GATE, ahead of the expensive part. The `sig` check further down
-         also skips redundant work, but it sits AFTER the skyline walk (341
-         elements, a getComputedStyle each, plus ~89 Range rects - ~9ms) and
-         after all seven placement searches, so it saved almost nothing: a
-         resize that changed nothing still cost 4-6ms. Everything downstream
-         is a pure function of these four numbers, all of which are already in
-         hand, so compare them first. Three rects instead of 341 style reads. */
-      const preSig = `${cw}|${Math.round(lineTop)}|${Math.round(footerBottom)}|${vh}`;
-      if (preSig === lastPreSig && lastSig) {
-        // Still repaint the pen at its current scroll target, so a measure can
-        // correct it even when rAF is throttled (background tab) and the
-        // easing loop isn't running.
-        penCur = penTarget();
-        applyPen(penCur);
-        return;
-      }
-      lastPreSig = preSig;
-
-      // ----- Content skyline: the rightmost VISUAL edge of every section's
-      // content, sampled every SKY_STEP px down the page (document x, per
-      // band). This is the hard boundary art and line stay right of - nothing
-      // may overlap or hide under any component or button. Wrapper divs often
-      // span the full row while painting nothing, so only elements that
-      // actually paint (media, form controls, backgrounds, borders, shadows)
-      // and raw text runs (tight glyph boxes via Range) are added - a bare
-      // container never blocks the strip.
-      const skyN = Math.max(1, Math.ceil((footerBottom - lineTop) / SKY_STEP));
-      const sky = new Float32Array(skyN);
-      const addRect = (r: DOMRect) => {
-        if (r.width < 1 || r.height < 1) return;
-        const i0 = Math.max(0, Math.floor((r.top + window.scrollY - lineTop) / SKY_STEP));
-        const i1 = Math.min(skyN - 1, Math.floor((r.bottom + window.scrollY - lineTop) / SKY_STEP));
-        for (let i = i0; i <= i1; i++) if (r.right > sky[i]) sky[i] = r.right;
-      };
-      const textRange = document.createRange();
-      for (const secId of [...SECTIONS, 'contact']) {
-        const sec = document.getElementById(secId);
-        if (!sec) continue;
-        for (const el of sec.querySelectorAll('*')) {
-          if (el.namespaceURI === 'http://www.w3.org/2000/svg') {
-            // inner svg nodes: the outer <svg> box already covers them
-            if (el.tagName.toLowerCase() === 'svg') addRect(el.getBoundingClientRect());
-            continue;
+      frame = 0;
+      if (disposed) return;
+      const width = host.clientWidth;
+      if (width < 1024) { setLayout(null); return; }
+      const hostTop = host.getBoundingClientRect().top + window.scrollY;
+      const segments: Segment[] = [];
+      let previous: { point: Point; tangent: Point; end: number } | undefined;
+      for (const id of STATIONS) {
+        const section = document.getElementById(id === 'hands' ? 'contact' : id);
+        const heading = section?.querySelector('h2');
+        const content = section?.firstElementChild;
+        if (!section || !heading || !content) continue;
+        // Remove the entrance translation so anchors stay stable while headings animate.
+        const transform = getComputedStyle(heading).transform;
+        const translateY = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
+        const headingTop = heading.getBoundingClientRect().top + window.scrollY - translateY;
+        const art = SKETCHES[id];
+        const gutter = Math.min(250, Math.max(180, width * 0.19));
+        const coords = (art.d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number);
+        // The hands source has wide empty margins. Size its actual strokes,
+        // rather than its canvas, so the two hands are clearly legible.
+        const xs = coords.filter((_, i) => i % 2 === 0);
+        const ys = coords.filter((_, i) => i % 2 === 1);
+        const minX = id === 'hands' ? Math.min(...xs) : 0;
+        const minY = id === 'hands' ? Math.min(...ys) : 0;
+        const boxW = id === 'hands' ? Math.max(...xs) - minX : art.vb[0];
+        const boxH = id === 'hands' ? Math.max(...ys) - minY : art.vb[1];
+        const scale = Math.min((gutter - 48) / boxW, (id === 'hands' ? 360 : 250) / boxH);
+        const artHeight = boxH * scale;
+        const x = width - gutter + (gutter - boxW * scale) / 2 - 10 - minX * scale;
+        const y = headingTop - hostTop - 12 - minY * scale;
+        const start = Math.max(previous ? previous.end + 80 : 0, headingTop - window.innerHeight * 0.82);
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        const end = Math.max(start + 1, Math.min(maxScroll, headingTop + artHeight - window.innerHeight * 0.38));
+        const entry = { x: x + art.entry[0] * scale, y: y + art.entry[1] * scale };
+        const exit = { x: x + art.exit[0] * scale, y: y + art.exit[1] * scale };
+        const direction = (atEnd: boolean): Point => {
+          const anchor = atEnd ? art.exit : art.entry;
+          for (let i = atEnd ? coords.length - 4 : 2; atEnd ? i >= 0 : i < coords.length; i += atEnd ? -2 : 2) {
+            const dx = (coords[i] - anchor[0]) * (atEnd ? -1 : 1);
+            const dy = (coords[i + 1] - anchor[1]) * (atEnd ? -1 : 1);
+            const length = Math.hypot(dx, dy);
+            if (length > 0.1) return { x: dx / length, y: dy / length };
           }
-          const cs = getComputedStyle(el);
-          if (cs.position === 'fixed' || cs.display === 'none') continue;
-          const paints =
-            el.matches('img,video,canvas,button,input,textarea,select,iframe') ||
-            cs.backgroundColor !== 'rgba(0, 0, 0, 0)' ||
-            cs.backgroundImage !== 'none' ||
-            parseFloat(cs.borderTopWidth) > 0 || parseFloat(cs.borderRightWidth) > 0 ||
-            cs.boxShadow !== 'none';
-          if (paints) { addRect(el.getBoundingClientRect()); continue; }
-          for (const node of el.childNodes) {
-            if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
-              textRange.selectNodeContents(node);
-              addRect(textRange.getBoundingClientRect());
-            }
-          }
-        }
-      }
-      // Max skyline over a LINE-LOCAL y band, as a line-local left bound
-      // (content right edge + the hard clearance). 0 where the band is empty.
-      const skyBoundLocal = (topLocal: number, botLocal: number) => {
-        const i0 = Math.max(0, Math.floor(topLocal / SKY_STEP));
-        const i1 = Math.min(skyN - 1, Math.floor(botLocal / SKY_STEP));
-        let m = 0;
-        for (let i = i0; i <= i1; i++) if (sky[i] > m) m = sky[i];
-        return m === 0 ? 0 : Math.max(0, m - wrapRect.left + CONTENT_GAP);
-      };
-      // A placed artwork occupies its bands COMPLETELY (the strip is too
-      // narrow to sit two drawings side by side), so later placements must
-      // skip those rows. Tracked SEPARATELY from the content skyline: content
-      // pushes the line right, artwork rows are where the line belongs.
-      const artRows = new Uint8Array(skyN);
-      const blockBandsLocal = (topLocal: number, botLocal: number) => {
-        const i0 = Math.max(0, Math.floor((topLocal - 12) / SKY_STEP));
-        const i1 = Math.min(skyN - 1, Math.floor((botLocal + 12) / SKY_STEP));
-        for (let i = i0; i <= i1; i++) artRows[i] = 1;
-      };
-      const artRowOver = (topLocal: number, botLocal: number) => {
-        const i0 = Math.max(0, Math.floor(topLocal / SKY_STEP));
-        const i1 = Math.min(skyN - 1, Math.floor(botLocal / SKY_STEP));
-        for (let i = i0; i <= i1; i++) if (artRows[i]) return true;
-        return false;
-      };
-
-      // One station per section: the illustration rides BESIDE the section in
-      // whatever free space the skyline leaves, right-aligned against the
-      // wave. The fit only ever SHRINKS from the cap: a smaller box spans
-      // fewer skyline bands, so the available gap can only grow and the
-      // iteration converges monotonically. If the preferred centre is too
-      // tight, the band slides up/down in 48px steps and the placement that
-      // fits the LARGEST artwork (preferring the centre) wins.
-      const gapRight = waveX - LINE_GAP;
-      const stations: Station[] = [];
-      const place = (
-        id: SketchId,
-        def: (typeof SKETCHES)[SketchId],
-        centerDocY: number,
-        opts?: { maxW?: number; minW?: number; nudgeX?: number; spanH?: number; rightEdge?: number; noSlide?: boolean; noBottomClamp?: boolean; gap?: number; bottomLimit?: number },
-      ): Station | null => {
-        const [bw, bh] = def.vb;
-        // rightEdge lets a station spill past the wave lane toward the column
-        // edge (the hands terminal: the line has left the wave for good by
-        // then, so that strip is free width); gap overrides CONTENT_GAP for
-        // one station (the hands run a tighter 18px against the form)
-        const rightLim = opts?.rightEdge ?? gapRight;
-        const minW = opts?.minW ?? MIN_W;
-        const gapAdj = CONTENT_GAP - (opts?.gap ?? CONTENT_GAP);
-        const bnd = (top: number, bot: number) => Math.max(0, skyBoundLocal(top, bot) - gapAdj);
-        const capW = Math.min(opts?.maxW ?? MAX_W, rightLim - (opts?.gap ?? CONTENT_GAP));
-        // dy for a box of width w at this offset, honouring the line bounds:
-        // floored so the first drawing never rises above the line's start
-        // (nothing may pre-draw), and kept off the very bottom of the
-        // PROVISIONAL line height — except for the terminal (hands), whose
-        // own bottom edge DEFINES the real final lineEnd a few lines below;
-        // clamping it against the provisional estimate is circular and was
-        // a source of unwanted vertical drift (user 2026-07-06). bottomLimit
-        // (local units) is the terminal's real floor instead: the FOOTER's
-        // top, so a big box can never dive past the page's content and grow
-        // blank page below the copyright line.
-        const dyAt = (off: number, w: number) => {
-          const floored = Math.max(centerDocY + off - lineTop - (bh * w / bw) / 2, 16);
-          const limit = opts?.bottomLimit != null
-            ? opts.bottomLimit - bh * (w / bw)
-            : opts?.noBottomClamp ? Infinity : lineHeight - bh * (w / bw) - 24;
-          return Math.min(floored, limit);
+          return { x: 0, y: 1 };
         };
-        // widest box allowed by the skyline over the band a w-wide box spans;
-        // rows already holding another artwork are off-limits entirely. The
-        // band extends 72px ABOVE the box: the pen needs that runway to swing
-        // from the wave into the drawing's entry without cutting the corner
-        // of a card that ends just above the artwork.
-        const fitAt = (off: number, w: number) => {
-          const dy = dyAt(off, w);
-          if (artRowOver(dy - 12, dy + (bh * w) / bw + 12)) return 0;
-          return Math.min(capW, rightLim - bnd(dy - 72, dy + (bh * w) / bw + 12));
-        };
-        let best: { s: number; dx: number; dy: number; score: number } | null = null;
-        // the slide range scales with the section: tall sections (the
-        // carousel) have free bands far from their midpoint. noSlide pins
-        // the anchor exactly (user 2026-07-06: "do not touch position") —
-        // whatever fits at off=0 is the honest answer, not a size/position
-        // trade the scoring function makes on its own.
-        const maxOff = opts?.noSlide ? 0 : Math.max(288, Math.min(600, (opts?.spanH ?? 0) / 2));
-        const offs = [0];
-        for (let o = 48; o <= maxOff; o += 48) offs.push(o, -o);
-        for (const off of offs) {
-          // only-shrink from the cap: a smaller box spans fewer skyline
-          // bands, so this converges monotonically...
-          let s = capW / bw;
-          for (let it = 0; it < 5; it++) {
-            const fitW = fitAt(off, s * bw);
-            if (fitW >= s * bw - 0.5) break;
-            s = Math.max(0, fitW) / bw;
-            if (s * bw < minW) break;
-          }
-          // ...but it can die on a straddle a smaller box slips past (a tall
-          // cap-sized box catches a blocker row the floor-sized box clears).
-          // Re-probe upward from the floor with a short binary search.
-          if (s * bw < minW && fitAt(off, minW) >= minW) {
-            let lo = minW, hi = capW;
-            for (let it = 0; it < 5; it++) {
-              const mid = (lo + hi) / 2;
-              if (fitAt(off, mid) >= mid) lo = mid; else hi = mid;
-            }
-            s = lo / bw;
-          }
-          // prefer the section's own centre: a slide only wins when it buys
-          // meaningfully more size (~8px of width per 64px of drift)
-          const score = s * bw - Math.abs(off) * 0.125;
-          if (s * bw >= minW && (!best || score > best.score)) {
-            const dy = dyAt(off, s * bw);
-            const bound = bnd(dy - 72, dy + bh * s + 12);
-            // nudged boxes may slide left of the wave-hugging default, but
-            // never past the skyline clearance
-            const dx = Math.max(bound, rightLim - bw * s - (opts?.nudgeX ?? 0));
-            best = { s, dx, dy, score };
-          }
-          if (best && off === 0 && best.s * bw >= capW - 0.5) break;
-        }
-        if (!best) return null;
-        const { s, dx, dy } = best;
-        return {
-          id,
-          d: transformPath(def.d, s, dx, dy),
-          entry: { x: def.entry[0] * s + dx, y: def.entry[1] * s + dy },
-          exit: { x: def.exit[0] * s + dx, y: def.exit[1] * s + dy },
-          s, dx, dy,
-          box: { x: dx, y: dy, w: bw * s, h: bh * s },
-        };
-      };
-
-      for (const id of SECTIONS) {
-        const section = document.getElementById(id);
-        if (!section) continue;
-        const secRect = section.getBoundingClientRect();
-        let centerDoc = secRect.top + secRect.height / 2 + window.scrollY;
-        if (id === 'about') {
-          // the face rides beside the Education card (nudged a touch lower)
-          const edu = section.querySelector('.rounded-2xl');
-          if (edu) {
-            const eRect = edu.getBoundingClientRect();
-            centerDoc = eRect.top + eRect.height / 2 + window.scrollY + 70;
-          }
-        }
-        // per-artwork caps (user 2026-07-06): the rocket runs LARGE beside the
-        // project cards; the graph keeps a tighter cap for clear space on its
-        // left AND hugs the wave (negative nudge = shifted right); the trophy
-        // runs a touch smaller
-        const st = place(
-          id, SKETCHES[id], centerDoc,
-          id === 'projects' ? { maxW: 345, nudgeX: 12, spanH: secRect.height }
-            : id === 'experience' ? { maxW: 280, nudgeX: -12, spanH: secRect.height }
-              : id === 'achievements' ? { maxW: 220, minW: 96, spanH: secRect.height }
-                : id === 'certifications' ? { maxW: 280, spanH: secRect.height }
-                  : { spanH: secRect.height },
-        );
-        if (st) {
-          stations.push(st);
-          blockBandsLocal(st.box.y, st.box.y + st.box.h);
-        }
-      }
-
-      // The hands+book terminal: the artwork is already the vertical
-      // composition (a hand reaching down passes the book to a hand below),
-      // so it places like any other station - below Contact's location pill,
-      // in the free strip. THE LINE ENDS on its trailing stroke - no return.
-      let handsStation: Station | null = null;
-      let endLocalY = lineHeight;
-      {
-        const contact = document.getElementById('contact');
-        if (contact) {
-          const cRect = contact.getBoundingClientRect();
-          const pill = contact.querySelector('button[title="Tap to switch location"]');
-          // the hands+book run LARGE (user 2026-07-06) — the terminal artwork
-          // is the line's finale, anchored in the tall FREE POCKET ABOVE THE
-          // FORM (between the Certifications art and the form's top row):
-          // beside/left of the wave's long empty descent, where the box can
-          // actually be big. The anchor sits ~320px above the form's top;
-          // the slide search + skyline refine the exact fit, and bottomLimit
-          // (the footer's top) still guards the floor.
-          const form = contact.querySelector('form');
-          const fRect = form?.getBoundingClientRect();
-          const centerDoc = fRect
-            ? fRect.top + window.scrollY - 320
-            : pill
-              ? pill.getBoundingClientRect().bottom + window.scrollY + 330
-              : cRect.top + cRect.height * 0.85 + window.scrollY;
-          // TUNE SIZE HERE: maxW is effectively uncapped — the real size
-          // comes from the pocket's height (box must clear the form's rows
-          // below and the certifications artwork's rows above). nudgeX
-          // shifts it left off the wave into the open band.
-          handsStation = place('hands', SKETCHES.hands, centerDoc, {
-            maxW: 2200, nudgeX: 180, spanH: Math.max(cRect.height * 2.4, window.innerHeight), rightEdge: cw - 8, gap: 18,
-            bottomLimit: footer.getBoundingClientRect().top + window.scrollY - lineTop - 16,
+        if (previous) {
+          const p = previous.point;
+          const lead = Math.min(70, Math.max(12, (entry.y - p.y) / 4));
+          const incoming = direction(false);
+          // Match the artist's endpoint directions, then ease into the long
+          // vertical connector. All cubic joins share a vertical tangent.
+          const control = (point: Point, tangent: Point, sign: number) => ({
+            x: Math.max(width - gutter + 12, Math.min(width - 20, point.x + tangent.x * 28 * sign)),
+            y: point.y + tangent.y * 28 * sign,
           });
-          if (handsStation) {
-            stations.push(handsStation);
-            blockBandsLocal(handsStation.box.y, handsStation.box.y + handsStation.box.h);
-            endLocalY = Math.max(handsStation.exit.y, handsStation.box.y + handsStation.box.h) + 28;
-          }
+          const out = control(p, previous.tangent, 1);
+          const into = control(entry, incoming, -1);
+          const a = { x: p.x, y: p.y + lead };
+          const b = { x: entry.x, y: entry.y - lead };
+          const bend = Math.max(12, (b.y - a.y) / 2);
+          segments.push({
+            id: `to-${id}`,
+            d: `M ${p.x} ${p.y} C ${out.x} ${out.y} ${a.x} ${a.y - lead / 2} ${a.x} ${a.y}`
+              + ` C ${a.x} ${a.y + bend} ${b.x} ${b.y - bend} ${b.x} ${b.y}`
+              + ` C ${b.x} ${b.y + lead / 2} ${into.x} ${into.y} ${entry.x} ${entry.y}`,
+            start: previous.end, end: Math.max(previous.end + 1, start),
+          });
         }
+        segments.push({ id, d: placePath(art.d, scale, x, y), start, end });
+        previous = { point: exit, tangent: direction(true), end };
       }
-      const lineEnd = Math.max(200, endLocalY);
-
-      // Content is present and measured - the appearance watcher is done.
-      contentObserver?.disconnect();
-      contentObserver = null;
-
-      const d = buildPath(lineEnd, waveX, stations, !!handsStation, skyBoundLocal, artRowOver, cw);
-      if (import.meta.env.DEV) {
-        // dev-only: exact placement geometry for overlap verification/tuning
-        (window as unknown as Record<string, unknown>).__spDebug = {
-          lineTop, wrapLeft: wrapRect.left, cw, lineEnd,
-          sky: Array.from(sky),
-          stations: stations.map(st => ({ id: st.id, s: st.s, box: st.box })),
-        };
-      }
-      // Everything below only costs time when the geometry actually changed —
-      // the d string encodes all of it, so it doubles as the change signature.
-      const sig = `${cw}|${d}`;
-      if (sig === lastSig) {
-        // geometry unchanged — still repaint the pen at its current scroll
-        // target so a measure can correct it even when rAF is throttled
-        // (background tab) and the easing loop isn't running
-        penCur = penTarget();
-        applyPen(penCur);
-        return;
-      }
-      lastSig = sig;
-      const seq = ++measureSeq;
-
-      track.setAttribute('d', d);
-      draw.setAttribute('d', d);
-      // the dot is a tiny dash on the SAME geometry — it shares the ink's
-      // dash parameterization, so it can never drift off the drawn front
-      // the way offset-path did; the halo is a wider, translucent copy that
-      // replaces the old drop-shadow filter (a filter on a path whose bbox
-      // is the whole 7000px line forced a huge intermediate surface on
-      // every frame — a large part of the scroll jank)
-      dot.setAttribute('d', d);
-      halo.setAttribute('d', d);
-      // JS (penTick) owns the dash offsets now — kill the CSS scroll-driven
-      // animations so they can't fight the driver
-      draw.style.animation = 'none';
-      dot.style.animation = 'none';
-      halo.style.animation = 'none';
-      // parse once, reuse for both the (cheap) dash-length heuristic below
-      // and the (heavier, idle-deferred) remap sampling — see remapStops for
-      // why this replaced SVGPathElement.getPointAtLength entirely
-      const segs = parseSegments(d);
-      // dash length in pathLength units scales with the REAL path length —
-      // pick it so the dash is <1px on screen and the round caps render a
-      // clean CIRCLE (a fixed 0.02 was ~6px here: a visible capsule)
-      const dotLen = approxLen(segs);
-      const dashU = Math.min(0.02, (0.6 / Math.max(1, dotLen)) * 100);
-      dot.style.strokeDasharray = `${dashU} ${200 - dashU}`;
-      halo.style.strokeDasharray = `${dashU} ${200 - dashU}`;
-      svg.setAttribute('viewBox', `0 0 ${cw} ${lineEnd}`);
-
-      // Anchor the element to the page (scrolls with content).
-      wrap.style.top = `${Math.round(lineTop)}px`;
-      wrap.style.height = `${Math.round(lineEnd)}px`;
-
-      // Draw frontier sits FRONTIER down the viewport: solid above it,
-      // unfilled below. 0% drawn when About's top hits that line, 100% when
-      // the frontier reaches the line's end inside the hands+book artwork.
-      const front = vh * FRONTIER;
-      // The trailing tip sits below where the frontier can ever reach (the
-      // page stops scrolling first), so completion is clamped to the page's
-      // last scroll position: the pen finishes exactly as you hit the bottom.
-      const maxScroll = footerBottom - vh;
-      scrollStart = Math.max(0, lineTop - front);
-      scrollEnd = Math.min(lineTop + lineEnd - front, maxScroll);
-      stops = null; // linear pacing until the remap below lands
-      // paint SYNCHRONOUSLY once — with rAF throttled (background tab) the
-      // easing loop may not run, and the drawing must still be correct
-      penCur = penTarget();
-      applyPen(penCur);
-
-      // The frontier remap keeps the pen ON the frontier even though the
-      // drawings pack length unevenly (see remapStops) — deferred to idle
-      // since flattening ~2800 segments still costs tens of ms.
-      idleId = idle(() => {
-        if (seq !== measureSeq) return; // superseded by a newer measure
-        stops = remapStops(segs, lineEnd);
-        penKick();
-      });
+      const next = { width, height: host.scrollHeight, segments };
+      setLayout(old => JSON.stringify(old) === JSON.stringify(next) ? old : next);
     };
-
-    /* Watches for #about / <footer> being inserted, so a late lazy chunk is
-       picked up even when nothing else fires again. Self-disconnects on the
-       first successful measure. */
-    let contentObserver: MutationObserver | null = null;
-    const waitForContent = () => {
-      if (contentObserver) return;
-      contentObserver = new MutationObserver(() => {
-        if (document.getElementById('about') && document.querySelector('footer')) {
-          contentObserver?.disconnect();
-          contentObserver = null;
-          measure();
-        }
-      });
-      contentObserver.observe(document.body, { childList: true, subtree: true });
-    };
-
-    /* measure() was bound STRAIGHT to `resize`, so a window drag ran the
-       whole thing on every event. A full re-measure costs ~50ms here (the
-       skyline walk, seven placement searches, buildPath, and four ~120KB `d`
-       writes), so that was multiple dropped frames per event.
-
-       Trailing debounce: the size you stop at is the only one that matters,
-       and the line simply holds its last geometry mid-drag. A leading run is
-       still allowed when the previous measure is old enough, so a single
-       discrete resize (a window snap, a devtools open, an orientation
-       change) redraws immediately instead of waiting out the delay. */
-    const RESIZE_TRAIL = 150;
-    const RESIZE_LEAD_AFTER = 400;
-    let resizeSettle = 0;
-    let lastMeasureAt = 0;
-    const runMeasure = () => { lastMeasureAt = performance.now(); measure(); };
-    const onResize = () => {
-      clearTimeout(resizeSettle);
-      resizeSettle = window.setTimeout(runMeasure, RESIZE_TRAIL);
-      if (performance.now() - lastMeasureAt > RESIZE_LEAD_AFTER) runMeasure();
-    };
-
-    // Crossing the lg boundary: clear the canvas going down, re-measure coming up.
-    const onMediaChange = () => {
-      lastSig = '';
-      lastPreSig = '';
-      if (desktop.matches) { measure(); return; }
-      for (const el of [track, draw, dot, halo]) el.setAttribute('d', '');
-    };
-
-    measure();
-    if (import.meta.env.DEV) {
-      // dev-only, alongside __spDebug: lets the cost of a measure be timed
-      // directly (the cheap pre-gate vs. a full re-measure).
-      (window as unknown as Record<string, unknown>).__spMeasure = measure;
-      (window as unknown as Record<string, unknown>).__spInvalidate =
-        () => { lastSig = ''; lastPreSig = ''; };
-    }
-    if (!desktop.matches) waitForContent(); // so widening later has content ready
-    window.addEventListener('scroll', penKick, { passive: true });
-    window.addEventListener('resize', onResize);
-    window.addEventListener('load', measure);
-    desktop.addEventListener('change', onMediaChange);
-    const t1 = window.setTimeout(measure, 600);  // re-measure after late layout (fonts/images)
-    const t2 = window.setTimeout(measure, 2200); // lazy-loaded sections settling
-    document.fonts?.ready.then(() => measure()).catch(() => {});
-
+    const schedule = () => { if (!disposed && !frame) frame = requestAnimationFrame(measure); };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(host);
+    for (const section of document.querySelectorAll('.section-shell')) observer.observe(section);
+    window.addEventListener('resize', schedule);
+    document.fonts.ready.then(schedule);
+    schedule();
     return () => {
-      cancelAnimationFrame(raf);
-      clearTimeout(resizeSettle);
-      measureSeq++; // invalidate any pending idle remap
-      if ('cancelIdleCallback' in window) window.cancelIdleCallback(idleId);
-      else clearTimeout(idleId);
-      contentObserver?.disconnect();
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('load', measure);
-      desktop.removeEventListener('change', onMediaChange);
-      clearTimeout(t1);
-      clearTimeout(t2);
-      window.removeEventListener('scroll', penKick);
-      disposed = true; // stops any in-flight penTick chain
+      disposed = true;
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', schedule);
     };
   }, []);
 
-  const accent = isDark ? '#8ea2ff' : '#4f46e5';
-  const track = isDark ? 'rgba(142,162,255,0.20)' : 'rgba(79,70,229,0.16)';
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg || !layout) return;
+    const routes = [...svg.querySelectorAll<SVGPathElement>('[data-route-segment]')];
+    const ink = svg.querySelector<SVGPathElement>('[data-ink]')!;
+    const pen = svg.querySelector<SVGGElement>('[data-pen]')!;
+    const penStrokes = [...pen.querySelectorAll<SVGPathElement>('path')];
+    const lengths = routes.map(path => path.getTotalLength());
+    const totalLength = lengths.reduce((sum, length) => sum + length, 0);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame = 0;
+    let current = window.scrollY;
+    let lastTime = 0;
+    const paint = (time: number) => {
+      frame = 0;
+      const target = window.scrollY;
+      const delta = Math.min(64, lastTime ? time - lastTime : 16);
+      lastTime = time;
+      current += (target - current) * (1 - Math.exp(-delta / 65));
+      if (Math.abs(target - current) < 0.2) current = target;
+      let distance = 0;
+      layout.segments.forEach((segment, i) => {
+        const p = reduced.matches ? 1 : clamp((current - segment.start) / (segment.end - segment.start));
+        distance += lengths[i] * p;
+      });
+      const progress = clamp(distance / totalLength);
+      ink.style.strokeDashoffset = String(1 - progress);
+      pen.style.opacity = progress <= 0 || progress >= 1 || reduced.matches ? '0' : '1';
+      // SVG's dash renderer and getPointAtLength use different length
+      // approximations on complex paths. Draw the nib with the SAME dash
+      // parameterization as the ink, so it cannot drift from the endpoint.
+      for (const stroke of penStrokes) stroke.style.strokeDashoffset = String(2 - progress);
+      if (current !== target && !document.hidden) frame = requestAnimationFrame(paint);
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(paint); };
+    const visibility = () => {
+      cancelAnimationFrame(frame); frame = 0; lastTime = 0;
+      if (!document.hidden) { current = window.scrollY; schedule(); }
+    };
+    window.addEventListener('scroll', schedule, { passive: true });
+    document.addEventListener('visibilitychange', visibility);
+    reduced.addEventListener('change', schedule);
+    schedule();
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', schedule);
+      document.removeEventListener('visibilitychange', visibility);
+      reduced.removeEventListener('change', schedule);
+    };
+  }, [layout]);
 
-  return (
-    <div
-      ref={wrapRef}
-      aria-hidden
-      className="scroll-path hidden lg:block"
-      style={{
-        position: 'absolute',
-        // TUNE HANDS+BOOK SIZE HERE, alongside the maxW below: the canvas is
-        // right-anchored (via `right` above) so its LEFT edge is what moves
-        // when width grows — the wave and every other station are placed
-        // relative to the right edge, so raising this ceiling gives the
-        // hands terminal (the only station whose own maxW exceeds this
-        // canvas's old 460px cap) more room WITHOUT moving anything else.
-        right: 'clamp(0.6rem, 1.6vw, 1.9rem)',
-        width: 'min(46vw, 820px)',
-        zIndex: 0, // behind the sections - a drawing may pass under wide content, never over it
-        pointerEvents: 'none',
-      }}
-    >
-      {/* overflow visible so the dot + its glow never get clipped at the path ends */}
-      <svg ref={svgRef} width="100%" height="100%" fill="none" preserveAspectRatio="none" style={{ overflow: 'visible' }}>
-        {/* faint full pre-path - shows the route AND the drawings the line will make */}
-        <path ref={trackRef} d="" stroke={track} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" />
-        {/* solid drawn portion - revealed down to the frontier as you scroll */}
-        <path ref={drawRef} className="scroll-path__draw" d="" pathLength={100} stroke={accent} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-        {/* the pen's glow: a wider translucent dash riding the same
-            geometry as the dot — replaces the old drop-shadow filter, whose
-            intermediate surface spanned the WHOLE line's bbox and was
-            repainted every scroll frame (a major jank source) */}
-        <path
-          ref={haloRef}
-          d=""
-          pathLength={100}
-          fill="none"
-          stroke={accent}
-          strokeOpacity={0.35}
-          strokeWidth={24}
-          strokeLinecap="round"
-        />
-        {/* the pen's dot: a tiny round-cap dash riding a copy of the same
-            path (offsets driven by penTick). Sharing the ink's dash engine
-            keeps it GLUED to the drawn front — the previous offset-path
-            circle used a different length parameterization and visibly
-            separated from the line on this dense a path. */}
-        <path
-          ref={dotRef}
-          className="scroll-path__dot"
-          d=""
-          pathLength={100}
-          fill="none"
-          stroke={accent}
-          strokeWidth={13}
-          strokeLinecap="round"
-        />
-      </svg>
-    </div>
-  );
-};
-
-export default ScrollPath;
+  // Remove subsequent move commands: the connector endpoints and artwork
+  // endpoints coincide, producing one uninterrupted SVG stroke.
+  const route = layout?.segments.map((segment, i) => i === 0 ? segment.d
+    : segment.d.replace(/^M\s+[-\d.e+]+[ ,]+[-\d.e+]+\s*/i, '')).join(' ');
+  const color = isDark ? '#a6b5f7' : '#6156ae';
+  return <div ref={wrapRef} aria-hidden="true" className="scroll-path" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
+    {layout && <svg ref={svgRef} width={layout.width} height={layout.height} fill="none" style={{ display: 'block' }}>
+      {layout.segments.map(segment => <g key={segment.id} data-station={segment.id}>
+        <path data-route-segment d={segment.d} stroke={color} strokeOpacity={0.07} strokeWidth={1.1} strokeLinecap="round" strokeLinejoin="round" />
+      </g>)}
+      <path data-ink d={route} pathLength={1} stroke={color} strokeWidth={1.35} strokeOpacity={0.62} strokeLinecap="round" strokeLinejoin="round" style={{ strokeDasharray: 1, strokeDashoffset: 1 }} />
+      <g data-pen style={{ opacity: 0 }}>
+        <path data-pen-halo d={route} pathLength={1} stroke={color} strokeWidth={14} strokeOpacity={0.09} strokeLinecap="round" style={{ strokeDasharray: '0 2', strokeDashoffset: 2 }} />
+        <path data-pen-tip d={route} pathLength={1} stroke={color} strokeWidth={5} strokeOpacity={0.85} strokeLinecap="round" style={{ strokeDasharray: '0 2', strokeDashoffset: 2 }} />
+      </g>
+    </svg>}
+  </div>;
+}

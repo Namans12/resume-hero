@@ -1,3 +1,14 @@
+# Current scroll artwork
+
+The live resume uses ordered centerlines from `src/components/authoredSketches.ts`.
+These were authored to complete each detail at its first encounter and avoid
+raster-router recovery walks. Edit `scripts/author-scroll-sketches.mjs` and
+`art/authored-gear-chart.json`, then run `node scripts/author-scroll-sketches.mjs`.
+See `docs/illustration-audit.md` for the design and tracing rationale.
+
+The licensed source artworks below and the legacy `sketchPaths.ts` generator
+are preserved as reference material; they are no longer the live tracing paths.
+
 # Licensed one-line vector artworks
 
 These are the user's licensed Vecteezy drawings, used pixel-faithfully by the

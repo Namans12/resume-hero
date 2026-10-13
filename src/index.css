@@ -64,7 +64,7 @@ html { scroll-behavior: smooth; }
 @media (min-width: 1024px) {
   .section-shell {
     padding-left: clamp(8.5rem, 26vw, 22rem);
-    padding-right: 5rem;
+    padding-right: clamp(180px, 19vw, 250px);
   }
 }
 
@@ -95,38 +95,8 @@ html.has-custom-cursor * { cursor: none !important; }
   will-change: transform;
 }
 
-/* ── Scroll-follow path (right side) - page-anchored, draws to mid-screen ──
-   The line is anchored in the page and scrolls with the content; the draw is
-   driven by scroll position (animation-timeline: scroll()) so it stays solid
-   down to the middle of the viewport and unfilled below - always ~half drawn in
-   view, completing at the footer. pathLength="100" normalises the dash so the
-   draw works for any generated length. JS sets --sp-start/--sp-end once. */
-.scroll-path__draw { stroke-dasharray: 100; stroke-dashoffset: 100; }
-/* The pen dot is a TINY ROUND-CAP DASH on a copy of the same path — the same
-   dash engine that draws the ink positions it, so dot and ink front share one
-   parameterization and stay glued (offset-path used its own length math and
-   visibly drifted from the dash on long dense paths). Pattern period 200 (of
-   pathLength 100) so only one dot ever shows; offset 200→100 walks it from
-   the start to the end of the drawn portion. */
-.scroll-path__dot { stroke-dasharray: 0.02 199.98; stroke-dashoffset: 200; }
-
-@supports (animation-timeline: scroll()) {
-  .scroll-path__draw {
-    animation: spDraw linear both;
-    animation-timeline: scroll(root block);
-    animation-range-start: var(--sp-start, 0px);
-    animation-range-end: var(--sp-end, 100%);
-  }
-  .scroll-path__dot {
-    animation: spDot linear both;
-    animation-timeline: scroll(root block);
-    animation-range-start: var(--sp-start, 0px);
-    animation-range-end: var(--sp-end, 100%);
-  }
-}
-
-@keyframes spDraw { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
-@keyframes spDot  { from { stroke-dashoffset: 200; } to { stroke-dashoffset: 100; } }
+/* A reserved desktop gutter keeps the section illustrations off the copy. */
+@media (max-width: 1023px) { .scroll-path { display: none; } }
 
 /* ── Cinematic side-nav ─────────────────────────────────────────── */
 .cine-nav__label {
@@ -326,8 +296,12 @@ html.has-custom-cursor * { cursor: none !important; }
 
   *, *::before, *::after { animation: none !important; }
 
-  /* These two only exist as animation keyframes, so with the animation gone
-     they'd otherwise sit visible at their un-animated state. */
+  /* These only exist as animation keyframes, so with the animation gone they
+     would otherwise sit visible at their un-animated state. */
   .rocket-tap { opacity: 0 !important; }
+  /* The gutter stroke is shown already-finished rather than drawing itself,
+     and the travelling pen dot - the one genuinely moving part - is dropped. */
+  .scroll-path__ink { stroke-dashoffset: 0 !important; }
+  .scroll-path__dot { display: none !important; }
   .cine-nav__label.is-active { background-position: 50% 80%; background-size: 360px; }
 }

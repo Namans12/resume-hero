@@ -26,6 +26,8 @@ const EASE = 0.18;          // cursor-follow easing (lower = smoother/laggier)
 // Below this the eased anchor has caught up with the pointer and there's
 // nothing left to redraw, so the loop parks itself.
 const SETTLE_PX = 0.05;
+// How long to poll for a real viewport before giving up (see buildField).
+const INIT_POLL_MS = 2000;
 
 interface Dot { x: number; y: number; alpha: number; }
 
@@ -55,6 +57,7 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
 
     const dotColor = isDark ? '#ffffff' : '#000000';
     let w = 0, h = 0, dpr = 1;
+    let ready = false; // true once buildField has sized things from a real viewport
     /* The static dot field never changes between resizes, but it was being
        rebuilt stroke by stroke every single frame: ~1300 beginPath/arc/fill
        triples plus a hexToRgba string allocation PER DOT PER FRAME. It's
@@ -63,11 +66,24 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
     const layer = document.createElement('canvas');
     const lctx = layer.getContext('2d');
 
-    // Precompute the dot field + each dot's masked base opacity.
-    const buildField = () => {
+    /* Precompute the dot field + each dot's masked base opacity.
+
+       `window.innerWidth`/`innerHeight` can legitimately read 0 - confirmed
+       by direct instrumentation: on first mount here they were 0x0 with
+       `document.readyState` already 'complete', self-correcting to the real
+       size within about a second with no resize/visibilitychange event
+       observed in between (most reproducible in an automated/headless tab
+       whose viewport hasn't been attached yet, but a page rendered inside a
+       hidden iframe or restored from bfcache before layout could hit the same
+       gap). Sizing `layer` from a 0 read and then blitting it is what threw
+       "canvas element with a width or height of 0". Bailing out here - and
+       leaving whatever was last successfully built untouched - is what lets
+       the caller retry instead of committing a broken, zero-sized field. */
+    const buildField = (): boolean => {
+      const nw = window.innerWidth, nh = window.innerHeight;
+      if (nw <= 0 || nh <= 0) return false;
+      w = nw; h = nh;
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = window.innerWidth;
-      h = window.innerHeight;
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       canvas.style.width = `${w}px`;
@@ -114,9 +130,19 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
           lctx.fill();
         }
       }
+      ready = true;
+      return true;
     };
 
     const render = () => {
+      // Nothing sized yet (see buildField) - nothing safe to draw. Reset
+      // rafRef rather than leaving kick()'s scheduled id dangling: kick()
+      // only checks "is a frame already pending", so a stale non-zero value
+      // here would silently swallow every kick() until tryInit succeeds and
+      // render() runs to completion on its own (which does reset it) -
+      // harmless in practice (sub-second window, self-heals), but there's no
+      // reason to leave that gap open.
+      if (!ready) { rafRef = 0; return; }
       ctx.clearRect(0, 0, w, h);
       const dots = dotsRef.current;
       const { dotSize } = SETTINGS;
@@ -180,8 +206,33 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
     let rafRef = 0;
     const kick = () => { if (!rafRef) rafRef = requestAnimationFrame(render); };
 
-    buildField();
-    render(); // paint the static field once; the loop only runs while the cursor moves
+    /* Poll until the viewport reports a real size, then build and paint.
+
+       This has to be setTimeout, not requestAnimationFrame: verified
+       directly (a bare `requestAnimationFrame` scheduled in this same kind
+       of context did not fire within 800ms, with `document.hasFocus()`
+       false, even though `document.visibilityState` read "visible") that
+       rAF can go essentially unserviced in a backgrounded/unfocused tab -
+       exactly the environment the 0x0 read happens in. An rAF-based retry
+       would schedule a callback that never runs, leaving the background
+       permanently blank instead of catching up once real dimensions land.
+       setTimeout is still serviced (throttled, but not suspended) there.
+
+       A `resize`/`visibilitychange` listener alone can't stand in for this
+       either: instrumented directly, the very first buildField()+render()
+       call used to run synchronously before any listener was even
+       registered, so an event-only retry would miss a crash that happens
+       before the event loop gets a turn at all - and no resize event was
+       observed firing during the 0x0 -> real transition regardless. Bounded
+       at INIT_POLL_MS so a page that never gets real layout (e.g. truly
+       display:none) doesn't retry forever. */
+    let initTimer = 0;
+    const initStart = performance.now();
+    const tryInit = () => {
+      if (buildField()) { render(); return; }
+      if (performance.now() - initStart < INIT_POLL_MS) initTimer = window.setTimeout(tryInit, 60);
+    };
+    tryInit();
 
     const onMove = (e: MouseEvent) => {
       if (!mouseRef.current.active) {
@@ -203,7 +254,16 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
       kick(); // one last frame to clear the lines
     };
     const onBlur = () => onLeave();
-    const onResize = () => { buildField(); render(); };
+    // A genuine later resize (or the harness/browser recovering on its own
+    // schedule, belt-and-suspenders alongside the poll above) re-measures;
+    // if the viewport has gone to 0 (e.g. minimized), buildField declines and
+    // the last good frame is simply left on screen rather than cleared.
+    const onResize = () => { if (buildField()) render(); };
+    // The real-world analogue of the poll's target case: a page prerendered
+    // or rendered inside a hidden iframe - genuinely 0x0 until it's shown -
+    // becoming visible is exactly a visibilitychange, so retry immediately
+    // on it rather than waiting out the poll's next tick.
+    const onVisible = () => { if (!ready && buildField()) render(); };
 
     if (import.meta.env.DEV) {
       // dev-only: pointer/easing state, so the mouseout-bubbling fix and the
@@ -213,6 +273,7 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
         mouse: { ...mouseRef.current },
         eased: { ...smoothRef.current },
         loopRunning: rafRef !== 0,
+        ready,
         dots: dotsRef.current.length,
       });
     }
@@ -221,13 +282,16 @@ const DottedBackground: React.FC<DottedBackgroundProps> = ({ isDark }) => {
     document.addEventListener('mouseout', onLeave);
     window.addEventListener('blur', onBlur);
     window.addEventListener('resize', onResize);
+    document.addEventListener('visibilitychange', onVisible);
 
     return () => {
       cancelAnimationFrame(rafRef);
+      clearTimeout(initTimer);
       window.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseout', onLeave);
       window.removeEventListener('blur', onBlur);
       window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, [isDark]);
 

@@ -108,6 +108,16 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
   const navItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const sectionRefs = useRef<(HTMLElement | null)[]>([]);
 
+  useLayoutEffect(() => {
+    // Hash targets do not exist until this lazy chunk mounts.
+    const id = window.location.hash.slice(1);
+    if (!SECTIONS.some(section => section.id === id)) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'instant', block: 'start' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
   /* One stable callback per slot, created once. Inline `el => (refs[i] = el)`
      arrows are a fresh identity on every render, so React detached and
      reattached all 14 refs (calling each with null, then the element) on
@@ -141,6 +151,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
       if (navRef.current) {
         navRef.current.style.opacity = visible ? '1' : '0';
         navRef.current.style.pointerEvents = visible ? 'auto' : 'none';
+        navRef.current.inert = !visible;
       }
 
       let activeIdx = 0;

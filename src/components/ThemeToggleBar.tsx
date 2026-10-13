@@ -22,6 +22,7 @@ const ThemeToggleBar: React.FC<ThemeToggleBarProps> = ({ isDark, onThemeChange, 
   return (
     /* Outer: fixed position + scale - no animation here */
     <div
+      inert={!interactive}
       style={{
         position: 'fixed',
         top: '1.5rem',

@@ -74,12 +74,13 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
     update();
     window.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onResize);
-    // #about arrives with a lazy chunk, so the first measure can land before it
-    // exists; re-measure once layout has settled.
-    const settle = window.setTimeout(onResize, 800);
+    // Follow lazy content and font-driven reflow instead of assuming the
+    // About section has loaded within an arbitrary timeout.
+    const layoutObserver = new ResizeObserver(onResize);
+    layoutObserver.observe(document.body);
     return () => {
       cancelAnimationFrame(raf);
-      clearTimeout(settle);
+      layoutObserver.disconnect();
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onResize);
     };
@@ -101,6 +102,10 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
 
   const launch = () => {
     if (busyRef.current) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      window.scrollTo({ top: aboutTarget(), behavior: 'instant' });
+      return;
+    }
     busyRef.current = true;
 
     setTapping(true); // 1) hand-tap animation over the rocket head
@@ -129,22 +134,24 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
           if (rocketRef.current) rocketRef.current.style.transform = `translateY(${e * flyUp}px)`;
           window.scrollTo(0, startY + (targetY - startY) * e);
           if (p < 1) pending.current.raf = requestAnimationFrame(step);
-          else { restore(); pending.current.restore = null; }
+          else {
+            restore();
+            pending.current.restore = null;
+            // Complete from the final animation frame, not a wall-clock
+            // timeout that can run while the browser has suspended rAF.
+            setThrust(false);
+            setResetting(true);
+            after(RESET_MS, () => {
+              if (rocketRef.current) rocketRef.current.style.transform = 'translateY(0px)';
+              setResetting(false);
+              busyRef.current = false;
+              pending.current.timers = [];
+            });
+          }
         };
         pending.current.raf = requestAnimationFrame(step);
 
-        // 4) once landed at About the rocket is off-screen: hide it, reset its
-        //    transform unseen, then fade it back in at rest (no snap, no turn).
-        after(FLY_MS, () => {
-          setThrust(false);
-          setResetting(true);
-          after(RESET_MS, () => {
-            if (rocketRef.current) rocketRef.current.style.transform = 'translateY(0px)';
-            setResetting(false);
-            busyRef.current = false;
-            pending.current.timers = [];
-          });
-        });
+
       });
     });
   };
@@ -159,6 +166,8 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
     <button
       type="button"
       aria-label="Back to About"
+      tabIndex={visible && !resetting ? 0 : -1}
+      aria-hidden={!visible && !active}
       onClick={launch}
       className="fixed z-50 flex items-center justify-center transition-transform duration-150 hover:-translate-y-0.5 active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       style={{
