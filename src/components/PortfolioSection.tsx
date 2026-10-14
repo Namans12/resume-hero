@@ -272,8 +272,10 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         position: 'relative',
         zIndex: 1,
         // theme tokens consumed by .cine-nav__label in index.css
-        ['--cine-idle' as string]:  isDark ? 'rgba(243,244,246,0.62)' : 'rgba(17,24,39,0.58)',
-        ['--cine-hover' as string]: isDark ? 'rgba(243,244,246,0.95)' : 'rgba(17,24,39,0.90)',
+        // Distance already fades labels to 65%; avoid multiplying that fade
+        // by a faint text color, especially against the light background.
+        ['--cine-idle' as string]:  isDark ? 'rgba(243,244,246,0.80)' : 'rgba(17,24,39,0.96)',
+        ['--cine-hover' as string]: isDark ? 'rgba(243,244,246,0.95)' : 'rgb(17,24,39)',
         ['--text-circle' as string]: isDark ? '#cdd2f0' : '#3a3f63',
       }}
     >
@@ -298,7 +300,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
             key={s.id}
             ref={setNavItemRef[i]}
             onClick={() => scrollTo(s.id)}
-            className="cine-nav__label pointer-events-auto text-left bg-transparent border-0 p-0 focus:outline-none"
+            className="cine-nav__label pointer-events-auto text-left bg-transparent border-0 p-0"
             style={{ fontSize: 'clamp(0.85rem, 1.75vw, 1.5rem)' }}
           >
             {s.label}
@@ -866,7 +868,7 @@ const ContactForm: React.FC<{
 
     if (FORMSPREE_ENDPOINT.includes('YOUR_FORM_ID')) {
       setStatus('error');
-      setErrorMsg('The contact form isn’t connected yet — add your Formspree endpoint.');
+      setErrorMsg('This form is unavailable. Please use the email link to get in touch.');
       return;
     }
     setStatus('submitting');

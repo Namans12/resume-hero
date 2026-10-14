@@ -11,11 +11,11 @@ See `docs/illustration-audit.md` for the design and tracing rationale.
 The licensed source artworks below and the legacy `sketchPaths.ts` generator
 are preserved as reference material; they are no longer the live tracing paths.
 
-# Licensed one-line vector artworks
+# Historical licensed source artwork and legacy tracing
 
-These are the user's licensed Vecteezy drawings, used pixel-faithfully by the
-scroll line (`src/components/ScrollPath.tsx`): each artwork's black line-art
-path is exported into the generated `sketchPaths.ts` by
+The section below describes the former mask-based implementation, not the
+current live renderer. These are the user's licensed Vecteezy reference drawings.
+The legacy pipeline exported each artwork's black line-art path into `sketchPaths.ts` by
 `scripts/generate-sketch-paths.mjs` and revealed by a mask stroke that rides
 the pen's own trace through that artwork - a generated centerline (the
 pipeline in `scripts/centerline/`), not a hand-measured ride - so the ink
@@ -49,7 +49,7 @@ threads through the composition.
   hand below Contact's Work/location pill. THE LINE ENDS on this artwork's
   trailing stroke — it does not continue to the footer.
 
-To swap or add artwork: drop the SVG here (auto-traced bitmap SVGs work, but
+For the legacy generator only: drop the SVG here (auto-traced bitmap SVGs work, but
 each file layers differently — face/hands: first fill-less `<path>` after the
 white `<g>`; gears: the LONGEST fill-less path; rocket/trophy: every path
 inside the fill-less `<g stroke-width="0">`, merged; award/growth: the

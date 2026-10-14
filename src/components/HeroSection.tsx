@@ -277,7 +277,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({
             onClick={() => {
               window.scrollTo({
                 top: window.innerHeight,
-                behavior: 'smooth',
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
               });
             }}
           />

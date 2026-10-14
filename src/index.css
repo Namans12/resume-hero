@@ -119,6 +119,11 @@ html.has-custom-cursor * { cursor: none !important; }
   will-change: transform, opacity;
 }
 .cine-nav__label:hover { color: var(--cine-hover); }
+.cine-nav__label:focus-visible {
+  /* The active label uses transparent text for its clipped artwork fill. */
+  outline: 2px solid var(--text-circle);
+  outline-offset: 4px;
+}
 
 /* Active item - text becomes a window onto the floating circle SVG */
 .cine-nav__label.is-active {
