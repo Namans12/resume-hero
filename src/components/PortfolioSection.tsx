@@ -245,7 +245,12 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
   }, []);
 
   const scrollTo = (id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const section = document.getElementById(id);
+    if (!section) return;
+    // Centering a section taller than the viewport clips its heading and art.
+    const tall = section.getBoundingClientRect().height > window.innerHeight + 1;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    section.scrollIntoView({ behavior: reduced ? 'instant' : 'smooth', block: tall ? 'start' : 'center' });
   };
 
   const font = '"Manrope", sans-serif';
@@ -536,7 +541,7 @@ const PortfolioSection: React.FC<PortfolioSectionProps> = ({ isDark }) => {
         <Eyebrow color={subtle}>Say hello</Eyebrow>
         <Heading color={text}>Contact</Heading>
 
-        <div className="mt-8 grid gap-10 lg:grid-cols-2 lg:items-start" style={{ maxWidth: '54rem' }}>
+        <div className="mt-8 grid gap-10 xl:grid-cols-2 xl:items-start" style={{ maxWidth: '54rem' }}>
           {/* Left - intro + direct links */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}

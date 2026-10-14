@@ -1,4 +1,4 @@
-/** Deliberately ordered centerlines, inspired by the user's reference art.
+/** Ordered centerlines from authored motifs and the original reference art.
  * Every feature is visited at its junction. These are not raster skeletons.
  * Re-run after editing: node scripts/author-scroll-sketches.mjs
  */
@@ -26,6 +26,45 @@ function normalize(d) {
     entry: values.slice(0, 2), exit: values.slice(-2), maskW: 2 };
 }
 
+// Regular scallops, a centered five-point star, and balanced ribbon tails.
+function award() {
+  const f = n => Math.round(n * 100) / 100;
+  const pair = p => `${f(p[0])} ${f(p[1])}`;
+  let d = 'M 120 0 C 113 18 103 35 120 40';
+  const radius = a => 76 + 9 * Math.cos(8 * (a + Math.PI / 2));
+  const point = a => [120 + radius(a) * Math.cos(a), 125 + radius(a) * Math.sin(a)];
+  const derivative = a => {
+    const r = radius(a), dr = -72 * Math.sin(8 * (a + Math.PI / 2));
+    return [dr * Math.cos(a) - r * Math.sin(a), dr * Math.sin(a) + r * Math.cos(a)];
+  };
+  const step = Math.PI * 2 / 64;
+  for (let i = 0; i < 64; i++) {
+    const a = -Math.PI / 2 + step * i, b = a + step;
+    const p = point(a), q = point(b), u = derivative(a), v = derivative(b);
+    d += ` C ${pair([p[0] + u[0] * step / 3, p[1] + u[1] * step / 3])}`
+      + ` ${pair([q[0] - v[0] * step / 3, q[1] - v[1] * step / 3])} ${pair(q)}`;
+  }
+  d += ' C 116 51 105 63 120 68 C 151.48 68 177 93.52 177 125'
+    + ' C 177 156.48 151.48 182 120 182 C 88.52 182 63 156.48 63 125'
+    + ' C 63 93.52 88.52 68 120 68 C 126 72 126 76 120 80';
+  let previous = [120, 80];
+  for (let i = 1; i <= 10; i++) {
+    const angle = -Math.PI / 2 + Math.PI * i / 5, r = i % 2 === 0 ? 45 : 21;
+    const next = [120 + r * Math.cos(angle), 125 + r * Math.sin(angle)];
+    d += ` C ${pair(previous.map((p, j) => p + (next[j] - p) / 3))}`
+      + ` ${pair(previous.map((p, j) => p + (next[j] - p) * 2 / 3))} ${pair(next)}`;
+    previous = next;
+  }
+  d += ' C 148 72 174 88 182 114 C 194 154 166 186 121 189'
+    + ' C 105 195 82 198 69 199 C 59 230 49 261 39 291'
+    + ' C 51 289 63 285 74 281 C 78 297 83 316 88 334'
+    + ' C 99 304 109 271 120 242 C 131 271 142 305 153 334'
+    + ' C 158 316 162 297 167 281 C 179 285 190 289 202 291'
+    + ' C 192 263 181 235 172 213 C 168 203 162 197 155 195'
+    + ' C 154 226 159 291 153 334';
+  return d;
+}
+
 const source = {
   // Nose → left eyebrow → jaw → BOTH lip lobes → right eyebrow → BOTH
   // ear loops → neck. Each loop is completed on the first encounter.
@@ -37,6 +76,7 @@ const source = {
     C 61 115 31 139 25 171 C 18 197 27 208 42 206
     C 89 204 138 213 166 231 C 202 260 148 269 103 267
     C 73 267 36 264 33 254 C 27 239 47 237 54 254
+    C 77 274 125 277 146 258 C 130 286 89 284 54 254
     C 65 311 76 373 105 439 C 150 537 207 623 279 719
     C 307 757 321 805 358 824 C 400 848 461 842 503 823
     C 552 802 574 758 570 701 C 568 648 543 618 500 606
@@ -55,6 +95,9 @@ const source = {
     C 883 25 913 27 935 41 C 949 52 955 73 954 104
     C 943 65 922 56 898 73 C 868 91 845 138 846 174
     C 846 211 866 236 895 224 C 929 209 952 147 954 104
+    C 928 80 902 111 883 145 C 868 174 876 208 895 204
+    C 914 199 929 159 922 140 C 919 129 908 148 909 168
+    C 933 151 944 120 954 104
     C 973 164 963 242 928 286 C 900 322 870 341 837 333
     C 815 331 811 313 818 298 C 825 282 836 299 837 333
     C 839 385 831 448 813 494 C 778 585 700 674 625 747
@@ -66,116 +109,70 @@ const source = {
 
   // Window, fins and flame are connected deliberately at distinct points.
   // No detached window rings or separate flame components to backfill.
-  projects: `M 148 0 C 148 29 141 62 132 90
-    C 124 60 110 35 92 20 C 70 46 56 75 55 98
-    C 79 103 110 99 132 90 C 145 121 152 159 154 193
-    C 169 202 183 214 187 235 C 190 247 193 257 193 265
-    C 181 254 168 244 153 241 C 152 219 144 208 132 211
-    C 115 219 126 245 110 251 C 102 254 97 238 94 224
-    C 85 205 76 177 70 152 C 61 147 61 123 79 116
-    C 96 109 110 120 111 136 C 112 151 99 163 85 159
-    C 72 155 69 139 77 129 C 85 118 101 125 103 136
-    C 105 147 93 156 84 149 C 74 141 69 153 70 166
-    C 72 183 82 204 86 218 C 79 227 67 239 55 245
-    C 51 229 47 211 55 199 C 60 190 65 185 71 183
-    C 62 177 46 193 45 210 C 42 231 51 252 55 269
-    C 67 258 74 245 87 242 C 97 247 104 248 110 251
-    C 120 266 132 282 139 294 C 127 285 108 265 101 251
-    C 89 266 118 306 139 321 C 143 293 151 267 140 251
-    C 133 244 127 258 130 275 C 132 291 142 305 139 321
-    C 135 338 122 348 131 363 C 140 378 148 385 148 400`,
+  projects: `M 190 0 C 186 35 174 81 154 104
+    C 145 72 129 45 110 25 C 91 45 75 73 66 104
+    C 89 112 132 112 154 104 C 163 139 164 183 160 218
+    C 137 229 98 225 78 214 C 97 201 135 204 160 218
+    C 177 227 190 245 195 282 C 181 270 169 261 154 258
+    C 145 259 139 258 132 256 C 123 259 116 267 110 277
+    C 101 267 91 260 84 257 C 74 228 68 200 72 172
+    C 74 162 82 160 88 160 C 88 147.85 97.85 138 110 138
+    C 122.15 138 132 147.85 132 160 C 132 172.15 122.15 182 110 182
+    C 97.85 182 88 172.15 88 160 C 92 158 95 155 96 160
+    C 96 152.27 102.27 146 110 146 C 117.73 146 124 152.27 124 160
+    C 124 167.73 117.73 174 110 174 C 102.27 174 96 167.73 96 160
+    C 86 164 82 182 77 197 C 60 219 48 245 45 282
+    C 59 270 70 262 84 257 C 95 251 113 251 132 256
+    C 136 270 131 293 126 311 C 121 327 115 337 110 344
+    C 104 334 97 319 95 305 C 92 287 97 274 104 271
+    C 102 292 109 314 110 344 C 122 329 145 309 137 287
+    C 130 300 124 321 110 344 C 114 357 128 369 122 381
+    C 118 390 112 396 110 410`,
 
   // Rim → left handle (including its small loop) → bowl → right handle
-  // → stem → pedestal. Simplified plaque avoids nested disconnected shapes.
-  achievements: `M 120 0 C 120 16 88 22 77 32
-    C 49 21 32 40 36 61 C 41 87 67 98 81 106
-    C 95 115 96 123 88 126 C 76 129 72 117 82 116
-    C 93 114 96 129 104 134
-    C 91 120 84 87 81 63 C 78 47 67 44 62 57
-    C 59 74 72 84 88 93 C 71 81 58 61 61 44
-    C 64 33 74 35 77 44 C 81 62 84 70 92 66
-    C 100 61 92 47 100 38 C 114 21 165 24 182 35
-    C 194 46 170 51 145 51 C 119 51 101 48 102 42
-    C 105 32 173 32 182 35 C 198 39 187 62 194 70
-    C 207 82 210 54 216 44 C 226 25 252 37 253 60
-    C 255 91 225 107 204 124 C 194 132 198 141 207 139
-    C 220 137 216 125 204 130 C 189 135 177 145 155 157
-    C 140 163 129 158 110 148 C 97 141 89 135 104 134
-    C 116 146 136 152 151 154 C 166 158 164 165 151 168
-    C 132 170 126 183 139 195 C 153 207 165 197 162 190
-    C 159 182 139 183 139 189 C 140 196 157 199 167 195
-    C 180 190 183 181 173 174 C 162 165 155 163 155 157
-    C 190 168 189 184 179 198 C 162 223 194 238 209 251
-    C 218 260 181 270 151 270 C 120 271 98 262 110 251
-    C 127 238 139 228 142 209 C 147 196 159 209 157 221
-    C 158 239 175 247 209 251 C 228 262 214 285 166 288
-    C 128 291 95 281 94 265 C 94 252 103 252 110 251
-    C 89 244 77 251 77 267 C 72 283 68 298 67 313
-    C 105 313 172 313 228 313 C 227 295 218 274 219 265
-    C 231 273 235 307 237 327 C 223 337 93 338 67 329
-    C 56 326 53 318 60 313 C 53 335 46 348 49 356
-    C 102 359 187 359 241 356 C 252 365 166 375 94 371
-    C 66 370 43 365 35 369 C 28 375 58 379 82 377
-    C 147 371 233 371 255 383 C 267 390 245 402 224 414`,
+  // → stem → pedestal. The plaque is drawn locally within the pedestal outline.
+  achievements: `M 110 0 C 104 20 78 25 66 48
+    C 66 35 156 35 156 48 C 156 61 66 61 66 48
+    C 62 58 62 66 64 73 C 56 68 58 52 50 47
+    C 29 34 15 53 19 78 C 23 105 46 123 73 129
+    C 83 132 83 143 75 146 C 65 149 60 138 68 134
+    C 74 130 81 139 77 142 C 82 160 97 173 110 177
+    C 139 165 150 114 156 62 C 164 66 163 51 172 47
+    C 193 35 207 54 203 78 C 199 105 176 124 149 129
+    C 139 132 139 143 147 146 C 157 149 162 138 154 134
+    C 148 130 141 139 145 142 C 171 128 186 107 185 82
+    C 184 65 174 59 170 70 C 166 83 159 90 156 62
+    C 151 102 143 153 110 177 C 98 181 89 190 96 195
+    C 102 200 122 200 128 195 C 136 187 119 181 110 184
+    C 126 194 126 214 116 230 C 130 242 141 249 153 253
+    C 163 265 78 273 73 253 C 89 245 104 231 101 216
+    C 98 199 106 194 110 184 C 108 204 113 231 110 243
+    C 127 250 142 256 153 253 C 160 256 166 261 170 263
+    C 175 274 177 286 178 295 C 145 299 76 299 45 295
+    C 46 286 48 274 51 263 C 91 265 138 265 170 263
+    C 169 268 166 271 163 273 C 135 273 86 273 60 273
+    C 58 278 57 283 57 287 C 89 289 139 289 164 287
+    C 164 282 164 278 163 273 C 171 283 176 293 179 301
+    C 186 310 190 317 193 324 C 154 328 76 328 32 324
+    C 34 316 36 309 38 304 C 71 307 137 307 179 301
+    C 183 313 194 327 192 333 C 182 343 143 338 132 345
+    C 120 351 114 355 112 365`,
 
   // Outer rosette → inner circle → star → ribbon, without coming back
   // from the ribbons to fill the medallion later.
-  certifications: `M 126 0 C 126 16 106 23 89 22
-    C 71 21 65 45 49 51 C 25 57 30 77 25 95
-    C 11 110 18 123 28 137 C 37 152 30 176 44 187
-    C 62 199 72 191 89 200 C 110 213 124 209 142 203
-    C 161 198 179 212 193 198 C 209 184 199 166 210 148
-    C 224 130 223 116 211 100 C 198 83 208 60 188 52
-    C 167 45 165 24 145 22 C 128 20 116 32 116 48
-    C 80 45 52 69 47 106 C 40 147 69 181 111 185
-    C 153 190 188 163 189 122 C 190 84 158 51 123 50
-    C 115 50 116 69 118 82 C 124 95 126 109 134 123
-    C 151 122 158 122 165 125 C 157 133 146 141 137 146
-    C 141 164 148 177 144 179 C 136 174 126 165 116 158
-    C 101 168 92 178 87 177 C 91 161 95 150 97 143
-    C 81 132 65 124 70 122 C 84 121 99 121 106 119
-    C 112 104 114 88 118 82 C 119 71 115 51 116 48
-    C 147 41 177 67 182 103 C 190 143 165 172 146 181
-    C 139 186 132 188 120 190 C 85 194 64 189 46 189
-    C 48 207 36 230 29 247 C 45 242 59 235 70 234
-    C 79 251 86 265 90 279 C 103 257 113 236 121 217
-    C 137 239 147 264 157 280 C 165 264 170 248 177 234
-    C 189 237 200 244 213 247 C 204 226 195 205 189 197
-    C 188 211 204 231 199 253 C 194 274 179 287 179 300`,
+  certifications: award(),
 
-  // Cuff → every finger of the upper hand → book → every finger of the
-  // lower hand → lower cuff. Pages are two unique edges, not repeated fills.
-  hands: `M 205 0 C 203 12 194 25 190 35
-    C 171 28 154 19 139 18 C 132 45 131 85 133 119
-    C 134 153 133 184 144 203 C 148 212 152 222 158 221
-    C 168 219 156 201 155 191 C 150 175 151 160 158 148
-    C 156 139 153 131 146 127 C 156 127 161 141 163 151
-    C 166 172 167 189 174 191 C 186 194 182 171 179 160
-    C 181 181 191 203 200 204 C 213 204 192 181 188 172
-    C 185 164 182 155 182 151 C 189 168 207 188 213 185
-    C 223 181 205 165 200 153 C 191 130 195 111 189 91
-    C 185 78 172 92 171 77 C 174 61 184 47 188 39
-    C 194 47 177 76 170 81 C 177 74 186 82 189 91
-    C 194 113 190 140 194 155 C 195 167 204 175 212 188
-    C 230 213 219 237 214 251 C 208 264 198 274 195 281
-    C 181 277 177 289 181 297 C 186 301 192 302 195 303
-    C 181 300 166 304 152 311 C 143 315 136 322 132 338
-    C 123 365 113 388 105 414 C 121 400 129 379 145 347
-    C 158 330 178 324 195 319 C 166 338 154 347 148 365
-    C 137 393 126 421 119 439 C 134 433 147 417 165 409
-    C 163 396 161 378 167 377 C 174 375 171 391 178 397
-    C 185 402 180 369 184 362 C 190 352 192 374 192 390
-    C 200 369 196 342 202 338 C 210 333 209 368 208 383
-    C 205 397 196 408 187 420 C 180 430 177 437 178 448
-    C 179 461 183 478 181 490 C 172 492 158 489 148 487
-    C 149 474 151 456 153 441 C 149 429 156 416 165 409`,
+
 };
 
 const sketches = Object.fromEntries(Object.entries(source).map(([id, d]) => [id, normalize(d)]));
 const additional = JSON.parse(readFileSync(join(root, 'art/authored-gear-chart.json'), 'utf8'));
 Object.assign(sketches, additional);
+// Restore the supplied hands/book contours with a preplanned, ordered route.
+// At merged raster junctions, narrow parallel lanes keep each stroke unique.
+sketches.hands = JSON.parse(readFileSync(join(root, 'art/original-hands-continuous.json'), 'utf8'));
 const ids = ['about', 'skills', 'experience', 'projects', 'achievements', 'certifications', 'hands'];
 const header = `/** Ordered one-stroke artwork. Generated from the deliberately authored\n * curves in scripts/author-scroll-sketches.mjs; do not raster-trace these.\n * Each small loop is completed before proceeding to the next feature. */\nexport type SketchId = ${ids.map(id => `'${id}'`).join(' | ')};\nexport interface SketchDef {\n  vb: readonly [number, number];\n  d: string;\n  entry: readonly [number, number];\n  exit: readonly [number, number];\n  maskW: number;\n}\n\nexport const SKETCHES: Record<SketchId, SketchDef> = `;
 writeFileSync(join(root, 'src/components/authoredSketches.ts'), header + JSON.stringify(sketches, null, 2) + ';\n');
-writeFileSync(join(root, 'artifacts/authored-sketches.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1680 400" width="1680" height="400"><rect width="1680" height="400" fill="#0b0b0f"/>${ids.map((id,i)=>`<g transform="translate(${i*240+20},35)"><text x="0" y="-12" fill="#ddd" font-family="sans-serif" font-size="14">${id}</text><path d="${sketches[id].d}" fill="none" stroke="#a6b5f7" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></g>`).join('')}</svg>`);
+writeFileSync(join(root, 'artifacts/authored-sketches.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1680 400" width="1680" height="400"><rect width="1680" height="400" fill="#0b0b0f"/>${ids.map((id,i)=>{ const scale=Math.min(1,200/sketches[id].vb[0]); return `<g transform="translate(${i*240+20},35)"><text x="0" y="-12" fill="#ddd" font-family="sans-serif" font-size="14">${id}</text><g transform="translate(${(200-sketches[id].vb[0]*scale)/2},${(300-300*scale)/2}) scale(${scale})"><path d="${sketches[id].d}" fill="none" stroke="#a6b5f7" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></g></g>`; }).join('')}</svg>`);
 console.log('Authored seven one-pass sketches and preview.');

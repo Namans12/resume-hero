@@ -64,7 +64,7 @@ html { scroll-behavior: smooth; }
 @media (min-width: 1024px) {
   .section-shell {
     padding-left: clamp(8.5rem, 26vw, 22rem);
-    padding-right: clamp(180px, 19vw, 250px);
+    padding-right: clamp(200px, 22vw, 320px);
   }
 }
 

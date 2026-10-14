@@ -1,9 +1,11 @@
 # Current scroll artwork
 
 The live resume uses ordered centerlines from `src/components/authoredSketches.ts`.
-These were authored to complete each detail at its first encounter and avoid
-raster-router recovery walks. Edit `scripts/author-scroll-sketches.mjs` and
-`art/authored-gear-chart.json`, then run `node scripts/author-scroll-sketches.mjs`.
+Five approved motifs are authored to complete local details without recovery
+walks. Experience and Contact preserve the supplied original contours, with
+preplanned stroke order and narrow parallel repairs at merged raster junctions.
+Edit `scripts/author-scroll-sketches.mjs`, `art/authored-gear-chart.json` and
+`art/original-hands-continuous.json`, then run `node scripts/author-scroll-sketches.mjs`.
 See `docs/illustration-audit.md` for the design and tracing rationale.
 
 The licensed source artworks below and the legacy `sketchPaths.ts` generator

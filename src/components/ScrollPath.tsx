@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { SKETCHES, type SketchId } from './authoredSketches';
+import { flowConnector, type Point } from './flowConnector';
+import { artworkPlacement } from './artworkPlacement';
 
 // Each station gets its own scroll interval: long artwork traces must not
 // consume the next section's drawing time simply because they contain more ink.
 const STATIONS: SketchId[] = ['about', 'skills', 'experience', 'projects', 'achievements', 'certifications', 'hands'];
-type Point = { x: number; y: number };
 type Segment = { id: string; d: string; start: number; end: number };
 type Layout = { width: number; height: number; segments: Segment[] };
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
@@ -14,6 +15,18 @@ function placePath(d: string, scale: number, x: number, y: number) {
   let coordinate = 0;
   return d.replace(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi, value =>
     String(Number(value) * scale + (coordinate++ % 2 === 0 ? x : y)));
+}
+
+// Entrance transforms move painted boxes without changing layout. Remove
+// translations from the whole ancestor chain (the form's wrapper animates
+// by 18px), otherwise its measured border remains offset after settling.
+function entranceOffset(el: Element, section: Element) {
+  let offset = 0;
+  for (let node: Element | null = el; node && node !== section; node = node.parentElement) {
+    const transform = getComputedStyle(node).transform;
+    if (transform !== 'none') offset += new DOMMatrixReadOnly(transform).m42;
+  }
+  return offset;
 }
 
 export default function ScrollPath({ isDark }: { isDark: boolean }) {
@@ -26,9 +39,13 @@ export default function ScrollPath({ isDark }: { isDark: boolean }) {
     if (!host) return;
     let frame = 0;
     let disposed = false;
+    const observed = new Set<Element>();
     const measure = () => {
       frame = 0;
       if (disposed) return;
+      for (const el of host.querySelectorAll('.section-shell > div, #contact form')) {
+        if (!observed.has(el)) { observer.observe(el); observed.add(el); }
+      }
       const width = host.clientWidth;
       if (width < 1024) { setLayout(null); return; }
       const hostTop = host.getBoundingClientRect().top + window.scrollY;
@@ -40,27 +57,25 @@ export default function ScrollPath({ isDark }: { isDark: boolean }) {
         const content = section?.firstElementChild;
         if (!section || !heading || !content) continue;
         // Remove the entrance translation so anchors stay stable while headings animate.
-        const transform = getComputedStyle(heading).transform;
-        const translateY = transform === 'none' ? 0 : new DOMMatrixReadOnly(transform).m42;
-        const headingTop = heading.getBoundingClientRect().top + window.scrollY - translateY;
+        const headingTop = heading.getBoundingClientRect().top + window.scrollY - entranceOffset(heading, section);
         const art = SKETCHES[id];
-        const gutter = Math.min(250, Math.max(180, width * 0.19));
+        const form = id === 'hands' ? section.querySelector('form') : null;
+        const formBottom = form ? form.getBoundingClientRect().bottom + window.scrollY - entranceOffset(form, section) : undefined;
+        // Keep the band beside the content on wide monitors, rather than
+        // letting the illustrations drift into a distant viewport margin.
+        const contentEdge = content.getBoundingClientRect().right - host.getBoundingClientRect().left;
+        const reservedGutter = Math.min(320, Math.max(200, width * 0.22));
+        const drawingWidth = Math.min(width, contentEdge + reservedGutter);
+        const placement = artworkPlacement(art, drawingWidth, headingTop, formBottom);
+        const { scale, gutter, x } = placement;
+        const y = placement.y - hostTop;
         const coords = (art.d.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(Number);
-        // The hands source has wide empty margins. Size its actual strokes,
-        // rather than its canvas, so the two hands are clearly legible.
-        const xs = coords.filter((_, i) => i % 2 === 0);
-        const ys = coords.filter((_, i) => i % 2 === 1);
-        const minX = id === 'hands' ? Math.min(...xs) : 0;
-        const minY = id === 'hands' ? Math.min(...ys) : 0;
-        const boxW = id === 'hands' ? Math.max(...xs) - minX : art.vb[0];
-        const boxH = id === 'hands' ? Math.max(...ys) - minY : art.vb[1];
-        const scale = Math.min((gutter - 48) / boxW, (id === 'hands' ? 360 : 250) / boxH);
-        const artHeight = boxH * scale;
-        const x = width - gutter + (gutter - boxW * scale) / 2 - 10 - minX * scale;
-        const y = headingTop - hostTop - 12 - minY * scale;
-        const start = Math.max(previous ? previous.end + 80 : 0, headingTop - window.innerHeight * 0.82);
+        const start = Math.max(previous ? previous.end + 80 : 0, placement.top - window.innerHeight * 0.82);
         const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-        const end = Math.max(start + 1, Math.min(maxScroll, headingTop + artHeight - window.innerHeight * 0.38));
+        // Contact is a stopping point: finish its drawing when the whole
+        // form enters the viewport, rather than leaving the cuff unfilled.
+        const finishFrontier = id === 'hands' ? 0.82 : 0.38;
+        const end = Math.max(start + 1, Math.min(maxScroll, placement.bottom - window.innerHeight * finishFrontier));
         const entry = { x: x + art.entry[0] * scale, y: y + art.entry[1] * scale };
         const exit = { x: x + art.exit[0] * scale, y: y + art.exit[1] * scale };
         const direction = (atEnd: boolean): Point => {
@@ -74,25 +89,24 @@ export default function ScrollPath({ isDark }: { isDark: boolean }) {
           return { x: 0, y: 1 };
         };
         if (previous) {
-          const p = previous.point;
-          const lead = Math.min(70, Math.max(12, (entry.y - p.y) / 4));
-          const incoming = direction(false);
-          // Match the artist's endpoint directions, then ease into the long
-          // vertical connector. All cubic joins share a vertical tangent.
-          const control = (point: Point, tangent: Point, sign: number) => ({
-            x: Math.max(width - gutter + 12, Math.min(width - 20, point.x + tangent.x * 28 * sign)),
-            y: point.y + tangent.y * 28 * sign,
-          });
-          const out = control(p, previous.tangent, 1);
-          const into = control(entry, incoming, -1);
-          const a = { x: p.x, y: p.y + lead };
-          const b = { x: entry.x, y: entry.y - lead };
-          const bend = Math.max(12, (b.y - a.y) / 2);
+          const tailTop = placement.top - hostTop + (placement.bottom - placement.top) * 0.5;
+          const lowerXs = coords.filter((_, i) => i % 2 === 0 && y + coords[i + 1] * scale >= tailTop);
           segments.push({
             id: `to-${id}`,
-            d: `M ${p.x} ${p.y} C ${out.x} ${out.y} ${a.x} ${a.y - lead / 2} ${a.x} ${a.y}`
-              + ` C ${a.x} ${a.y + bend} ${b.x} ${b.y - bend} ${b.x} ${b.y}`
-              + ` C ${b.x} ${b.y + lead / 2} ${into.x} ${into.y} ${entry.x} ${entry.y}`,
+            d: flowConnector(
+              { point: previous.point, tangent: previous.tangent },
+              { point: entry, tangent: direction(false) },
+              { left: drawingWidth - gutter + 10, right: drawingWidth - 10 },
+              STATIONS.indexOf(id) - 1,
+              {
+                left: x + Math.min(...coords.filter((_, i) => i % 2 === 0)) * scale,
+                right: x + Math.max(...coords.filter((_, i) => i % 2 === 0)) * scale,
+                top: placement.top - hostTop,
+                bottom: placement.bottom - hostTop,
+                tailTop,
+                lowerRight: x + Math.max(...lowerXs) * scale,
+              },
+            ),
             start: previous.end, end: Math.max(previous.end + 1, start),
           });
         }
@@ -105,7 +119,7 @@ export default function ScrollPath({ isDark }: { isDark: boolean }) {
     const schedule = () => { if (!disposed && !frame) frame = requestAnimationFrame(measure); };
     const observer = new ResizeObserver(schedule);
     observer.observe(host);
-    for (const section of document.querySelectorAll('.section-shell')) observer.observe(section);
+    for (const section of document.querySelectorAll('.section-shell')) { observer.observe(section); observed.add(section); }
     window.addEventListener('resize', schedule);
     document.fonts.ready.then(schedule);
     schedule();
