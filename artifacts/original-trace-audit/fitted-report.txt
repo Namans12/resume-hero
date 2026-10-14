@@ -1,0 +1,44 @@
+{
+  "name": "graph",
+  "curves": 1897,
+  "entry": [
+    345.88402500681065,
+    285.7040243787551
+  ],
+  "exit": [
+    9.049329270207485,
+    291.47533536489624
+  ],
+  "vb": [
+    427,
+    300
+  ],
+  "terminalExtensionRendered": 0,
+  "firstBook": null,
+  "lateUpper": null
+}
+{
+  "name": "hands",
+  "curves": 2785,
+  "entry": [
+    73.07341074315313,
+    8
+  ],
+  "exit": [
+    24.100182396696102,
+    292
+  ],
+  "vb": [
+    83,
+    300
+  ],
+  "terminalExtensionRendered": 2.2362204724390278,
+  "firstBook": {
+    "i": 27,
+    "startPercent": 40.03907809511112,
+    "endPercent": 67.76081631578155,
+    "minY": 874.5000395922557,
+    "maxY": 1240.7593147748912
+  },
+  "lateUpper": []
+}
