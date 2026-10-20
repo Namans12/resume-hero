@@ -29,6 +29,57 @@ function entranceOffset(el: Element, section: Element) {
   return offset;
 }
 
+/* Where content actually ends, row by row: the rightmost pixel anything
+   paints (boxes for painted elements, glyph boxes for text - a heading's
+   box spans the whole column while its letters stop far short), in host
+   coordinates. Entrance translations are removed along each element's
+   ancestor chain, so it describes the settled layout even before the
+   whileInView animations have played (the experience cards start 24px to
+   the left). Used only by flourishes that leave the gutter for empty space. */
+function contentSkyline(host: HTMLElement) {
+  const ROW = 16;
+  const rect = host.getBoundingClientRect();
+  const top0 = rect.top + window.scrollY;
+  const sky = new Float32Array(Math.ceil(host.scrollHeight / ROW) + 1);
+  const shifts = new Map<Element, Point>();
+  const shift = (el: Element | null, stop: Element): Point => {
+    if (!el || el === stop) return { x: 0, y: 0 };
+    const known = shifts.get(el);
+    if (known) return known;
+    const up = shift(el.parentElement, stop);
+    const t = getComputedStyle(el).transform;
+    const m = t === 'none' ? null : new DOMMatrixReadOnly(t);
+    const own = { x: up.x + (m ? m.m41 : 0), y: up.y + (m ? m.m42 : 0) };
+    shifts.set(el, own);
+    return own;
+  };
+  const add = (r: DOMRect, s: Point) => {
+    if (r.width < 1 || r.height < 1) return;
+    const right = r.right - rect.left - s.x;
+    const a = Math.max(0, Math.floor((r.top + window.scrollY - top0 - s.y) / ROW));
+    const b = Math.min(sky.length - 1, Math.floor((r.bottom + window.scrollY - top0 - s.y) / ROW));
+    for (let i = a; i <= b; i++) if (right > sky[i]) sky[i] = right;
+  };
+  const range = document.createRange();
+  for (const section of host.querySelectorAll('.section-shell')) {
+    for (const el of section.querySelectorAll('img,video,canvas,button,input,textarea,select,form,[class*="rounded"]')) {
+      add(el.getBoundingClientRect(), shift(el, section));
+    }
+    const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.textContent?.trim()) continue;
+      range.selectNodeContents(n);
+      add(range.getBoundingClientRect(), shift(n.parentElement, section));
+    }
+  }
+  return (top: number, bottom: number) => {
+    let max = 0;
+    const a = Math.max(0, Math.floor(top / ROW)), b = Math.min(sky.length - 1, Math.floor(bottom / ROW));
+    for (let i = a; i <= b; i++) if (sky[i] > max) max = sky[i];
+    return max;
+  };
+}
+
 export default function ScrollPath({ isDark }: { isDark: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -49,6 +100,7 @@ export default function ScrollPath({ isDark }: { isDark: boolean }) {
       const width = host.clientWidth;
       if (width < 1024) { setLayout(null); return; }
       const hostTop = host.getBoundingClientRect().top + window.scrollY;
+      const freeLeft = contentSkyline(host);
       const segments: Segment[] = [];
       let previous: { point: Point; tangent: Point; end: number } | undefined;
       for (const id of STATIONS) {
@@ -106,6 +158,9 @@ export default function ScrollPath({ isDark }: { isDark: boolean }) {
                 tailTop,
                 lowerRight: x + Math.max(...lowerXs) * scale,
               },
+              // Gears -> graph: oval loops; graph -> rocket: a heart knot.
+              id === 'experience' ? { kind: 'ovals', freeLeft }
+                : id === 'projects' ? { kind: 'heart', freeLeft } : undefined,
             ),
             start: previous.end, end: Math.max(previous.end + 1, start),
           });

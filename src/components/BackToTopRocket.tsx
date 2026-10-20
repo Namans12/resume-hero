@@ -19,20 +19,14 @@ const RESET_MS = 320; // fade-out window before the transform is reset unseen
 const easeInOut = (t: number) =>
   t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
-// Scroll position that centers the About section in the viewport.
-const aboutTarget = () => {
-  const el = document.getElementById('about');
-  if (!el) return 0;
-  const absTop = el.getBoundingClientRect().top + window.scrollY;
-  const centered = absTop + el.offsetHeight / 2 - window.innerHeight / 2;
-  return Math.max(0, Math.round(centered));
-};
+// The hero opens the page, so "home" is simply the very top.
+const HERO_TOP = 0;
 
 /**
- * Fixed bottom-right rocket that returns the visitor to the About section.
+ * Fixed bottom-right rocket that returns the visitor to the hero section.
  * Always mounted (opacity fades with scroll). On tap: a hand-tap animation plays
  * over the rocket, then the thrusters fire (rocket holds still), then the rocket
- * rises straight up - no rotation - while the page scrolls to About in lock-step.
+ * rises straight up - no rotation - while the page scrolls to the top in lock-step.
  */
 const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
   const [visible, setVisible] = useState(false);
@@ -103,7 +97,7 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
   const launch = () => {
     if (busyRef.current) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      window.scrollTo({ top: aboutTarget(), behavior: 'instant' });
+      window.scrollTo({ top: HERO_TOP, behavior: 'instant' });
       return;
     }
     busyRef.current = true;
@@ -115,11 +109,11 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
       setThrust(true); // 2) thrusters fire - rocket holds still
 
       after(THRUST_MS, () => {
-        // 3) lift straight up + scroll to About, driven by one locked progress.
+        // 3) lift straight up + scroll to the hero, driven by one locked progress.
         //    scroll-behavior forced to 'auto' so the page tracks each frame
         //    instead of lagging behind via CSS smooth-scroll.
         const startY = window.scrollY;
-        const targetY = aboutTarget();
+        const targetY = HERO_TOP;
         const flyUp = -(window.innerHeight + 200);
         const html = document.documentElement;
         const prevBehavior = html.style.scrollBehavior;
@@ -165,7 +159,7 @@ const BackToTopRocket: React.FC<BackToTopRocketProps> = ({ isDark }) => {
   return (
     <button
       type="button"
-      aria-label="Back to About"
+      aria-label="Back to top"
       tabIndex={visible && !resetting ? 0 : -1}
       aria-hidden={!visible && !active}
       onClick={launch}
